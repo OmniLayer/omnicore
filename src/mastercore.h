@@ -55,6 +55,10 @@ int const MAX_STATE_HISTORY = 50;
 #define MP_TX_PKT_V0  0
 #define MP_TX_PKT_V1  1
 
+// Auditor increase/decrease
+#define OMNI_AUDITOR_DECREASE 0
+#define OMNI_AUDITOR_INCREASE 1
+
 // Maximum outputs per BTC Transaction
 #define MAX_BTC_OUTPUTS 16
 
@@ -485,6 +489,7 @@ typedef std::map<uint256, CMPPending> PendingMap;
 extern PendingMap my_pending;
 string strMPProperty(unsigned int i);
 
+bool AbortOmniNode(const std::string &strMessage);
 int GetHeight(void);
 uint32_t GetLatestBlockTime(void);
 CBlockIndex* GetBlockIndex(const uint256& hash);
@@ -502,6 +507,7 @@ uint256 send_INTERNAL_1packet(const string &FromAddress, const string &ToAddress
 
 bool isTestEcosystemProperty(unsigned int property);
 bool isMainEcosystemProperty(unsigned int property);
+uint32_t GetNextPropertyId(bool maineco);
 
 CMPTally *getTally(const string & address);
 
@@ -516,7 +522,8 @@ bool isTransactionTypeAllowed(int txBlock, unsigned int txProperty, unsigned int
 
 bool getValidMPTX(const uint256 &txid, int *block = NULL, unsigned int *type = NULL, uint64_t *nAmended = NULL);
 
-bool update_tally_map(string who, unsigned int which_currency, int64_t amount, TallyType ttype);
+bool update_tally_map(string who, unsigned int which_property, int64_t amount, TallyType ttype, uint256 txid, const std::string& updateReason, const std::string& caller);
+
 std::string getMasterCoreAlertString();
 std::string getMasterCoreAlertTextOnly();
 bool parseAlertMessage(std::string rawAlertStr, int32_t *alertType, uint64_t *expiryValue, uint32_t *typeCheck, uint32_t *verCheck, std::string *alertMessage);

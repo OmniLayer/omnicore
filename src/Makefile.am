@@ -164,7 +164,8 @@ OMNICORE_H = \
   mastercore_script.h \
   mastercore_sp.h \
   mastercore_tx.h \
-  mastercore_version.h
+  mastercore_version.h \
+  omnicore_auditor.h
 
 OMNICORE_CPP = \
   mastercore.cpp \
@@ -176,7 +177,8 @@ OMNICORE_CPP = \
   mastercore_script.cpp \
   mastercore_sp.cpp \
   mastercore_tx.cpp \
-  mastercore_version.cpp
+  mastercore_version.cpp \
+  omnicore_auditor.cpp
 
 BITCOIN_CORE_H += \
   $(OMNICORE_H)

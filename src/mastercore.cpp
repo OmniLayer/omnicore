@@ -23,6 +23,7 @@
 #include "mastercore_sp.h"
 #include "mastercore_tx.h"
 #include "mastercore_version.h"
+#include "omnicore_auditor.h"
 
 #include "base58.h"
 #include "chainparams.h"
@@ -38,6 +39,7 @@
 #include "util.h"
 #include "utilstrencodings.h"
 #include "utiltime.h"
+#include "ui_interface.h"
 #include "wallet.h"
 
 #include <boost/algorithm/string.hpp>
@@ -147,6 +149,15 @@ static const int txRestrictionsRules[][3] = {
 CMPTxList *mastercore::p_txlistdb;
 CMPTradeList *mastercore::t_tradelistdb;
 CMPSTOList *mastercore::s_stolistdb;
+
+// We don't always want to tell the user a fatal internal error occured (as AbortNode now does), so use our own abort (copied from 0.9)
+bool mastercore::AbortOmniNode(const std::string &strMessage) {
+    strMiscWarning = strMessage;
+    LogPrintf("*** %s\n", strMessage);
+    uiInterface.ThreadSafeMessageBox(strMessage, "", CClientUIInterface::MSG_ERROR);
+    StartShutdown();
+    return false;
+}
 
 // a copy from main.cpp -- unfortunately that one is in a private namespace
 int mastercore::GetHeight()
@@ -316,7 +327,7 @@ static CMPPending *pendingDelete(const uint256 txid, bool bErase = false)
 
     if (src_amount)
     {
-      update_tally_map(p_pending->src, p_pending->prop, p_pending->amount, PENDING);
+      update_tally_map(p_pending->src, p_pending->prop, p_pending->amount, PENDING, txid, "Erase pending transaction", strprintf("%s line %d",__FUNCTION__,__LINE__));
     }
 
     if (bErase)
@@ -339,7 +350,7 @@ CMPPending pending;
   if (msc_debug_verbose3) file_log("%s(%s,%s,%u,%ld,%d, %s), line %d, file: %s\n", __FUNCTION__, txid.GetHex().c_str(), FromAddress.c_str(), propId, Amount, type, txDesc,__LINE__, __FILE__);
 
   // support for pending, 0-confirm
-  if (update_tally_map(FromAddress, propId, -Amount, PENDING))
+  if (update_tally_map(FromAddress, propId, -Amount, PENDING, txid, "Add pending transaction", strprintf("%s line %d",__FUNCTION__,__LINE__)))
   {
     pending.src = FromAddress;
     pending.amount = Amount;
@@ -578,7 +589,7 @@ bool mastercore::checkExpiredAlerts(unsigned int curBlock, uint64_t curTime)
                          // can't be trusted to provide valid data, shutdown
                          file_log("DEBUG ALERT - Shutting down due to unsupported live TX - alert string %s\n", global_alert_message);
                          PrintToConsole("DEBUG ALERT - Shutting down due to unsupported live TX - alert string %s\n", global_alert_message); // echo to screen
-                         if (!GetBoolArg("-overrideforcedshutdown", false)) AbortNode("Shutting down due to alert: " + getMasterCoreAlertTextOnly());
+                         if (!GetBoolArg("-overrideforcedshutdown", false)) AbortOmniNode("Shutting down due to alert: " + getMasterCoreAlertTextOnly());
                          return false;
                      }
 
@@ -648,7 +659,7 @@ int64_t prev = 0, owners = 0;
 }
 
 // return true if everything is ok
-bool mastercore::update_tally_map(string who, unsigned int which_property, int64_t amount, TallyType ttype)
+bool mastercore::update_tally_map(string who, unsigned int which_property, int64_t amount, TallyType ttype, uint256 txid, const std::string& updateReason, const std::string& caller)
 {
 bool bRet = false;
 uint64_t before, after;
@@ -656,6 +667,7 @@ uint64_t before, after;
   if (0 == amount)
   {
     file_log("%s(%s, %u=0x%X, %+ld, ttype= %d) 0 FUNDS !\n", __FUNCTION__, who.c_str(), which_property, which_property, amount, ttype);
+    if ((auditorEnabled) && (auditBalanceChanges)) Auditor_NotifyBalanceChangeRequested(who, amount, which_property, ttype, updateReason, txid, caller, false);
     return false;
   }
 
@@ -684,6 +696,15 @@ uint64_t before, after;
       file_log("%s(%s, %u=0x%X, %+ld, ttype=%d); before=%lu, after=%lu\n",
        __FUNCTION__, who.c_str(), which_property, which_property, amount, ttype, before, after);
     }
+  }
+
+  // Notify the auditor a balance change was requested and the result
+  if ((auditorEnabled) && (auditBalanceChanges)) {
+      if (!bRet) {
+          Auditor_NotifyBalanceChangeRequested(who, amount, which_property, ttype, updateReason, txid, caller, false);
+      } else {
+          Auditor_NotifyBalanceChangeRequested(who, amount, which_property, ttype, updateReason, txid, caller, true);
+      }
   }
 
   return bRet;
@@ -825,12 +846,21 @@ const double available_reward=all_reward * part_available;
   if (msc_debug_exo) file_log("devmsc=%lu, exodus_prev=%lu, exodus_delta=%ld\n", devmsc, exodus_prev, exodus_delta);
 
   // skip if a block's timestamp is older than that of a previous one!
-  if (0>exodus_delta) return 0;
+  if (0>=exodus_delta) return 0;
 
-  update_tally_map(exodus_address, OMNI_PROPERTY_MSC, exodus_delta, BALANCE);
+  update_tally_map(exodus_address, OMNI_PROPERTY_MSC, exodus_delta, BALANCE, 0, "Award Dev MSC", strprintf("%s line %d",__FUNCTION__,__LINE__));
   exodus_prev = devmsc;
 
-  return devmsc;
+  return exodus_delta;
+}
+
+uint32_t mastercore::GetNextPropertyId(bool maineco)
+{
+  if(maineco) {
+      return _my_sps->peekNextSPID(1);
+  } else {
+      return _my_sps->peekNextSPID(2);
+  }
 }
 
 // TODO: optimize efficiency -- iterate only over wallet's addresses in the future
@@ -929,9 +959,14 @@ int TXExodusFundraiser(const CTransaction &wtx, const string &sender, int64_t Ex
 
     uint64_t msc_tot= round( 100 * ExodusHighestValue * bonus ); 
     if (msc_debug_exo) file_log("Exodus Fundraiser tx detected, tx %s generated %lu.%08lu\n",wtx.GetHash().ToString().c_str(), msc_tot / COIN, msc_tot % COIN);
- 
-    update_tally_map(sender, OMNI_PROPERTY_MSC, msc_tot, BALANCE);
-    update_tally_map(sender, OMNI_PROPERTY_TMSC, msc_tot, BALANCE);
+
+    update_tally_map(sender, OMNI_PROPERTY_MSC, msc_tot, BALANCE, wtx.GetHash(), "Exodus Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map(sender, OMNI_PROPERTY_TMSC, msc_tot, BALANCE, wtx.GetHash(), "Exodus Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__));
+
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, OMNI_PROPERTY_MSC, msc_tot, "Exodus Crowdsale (txid: " + wtx.GetHash().ToString() + ")");
+        Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, OMNI_PROPERTY_TMSC, msc_tot, "Exodus Crowdsale (txid: " + wtx.GetHash().ToString() + ")");
+    }
 
     return 0;
   }
@@ -1646,13 +1681,13 @@ int input_msc_balances_string(const string &s)
       continue;
     }
 
-    if (balance) update_tally_map(strAddress, property, balance, BALANCE);
-    if (sellReserved) update_tally_map(strAddress, property, sellReserved, SELLOFFER_RESERVE);
-    if (acceptReserved) update_tally_map(strAddress, property, acceptReserved, ACCEPT_RESERVE);
+    if (balance) update_tally_map(strAddress, property, balance, BALANCE, 0, "Load balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    if (sellReserved) update_tally_map(strAddress, property, sellReserved, SELLOFFER_RESERVE, 0, "Load balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    if (acceptReserved) update_tally_map(strAddress, property, acceptReserved, ACCEPT_RESERVE, 0, "Load balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
     // FIXME
     const uint64_t metadexReserve = 0;
-    if (metadexReserve) update_tally_map(strAddress, property, sellReserved, METADEX_RESERVE);
+    if (metadexReserve) update_tally_map(strAddress, property, sellReserved, METADEX_RESERVE, 0, "Load balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
   }
 
   return 1;
@@ -2442,23 +2477,23 @@ int mastercore_init()
 #if 0
     if (isNonMainNet()) nWaterlineBlock = 272790;
 
-    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 1 , 500000, BALANCE);
-    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 1 , 100000, BALANCE);
+    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 1 , 500000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 1 , 100000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
-    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2 , 500000, BALANCE);
-    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2 , 100000, BALANCE);
+    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2 , 500000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2 , 100000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
-    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 3 , 500000, BALANCE);
-    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 3 , 100000, BALANCE);
+    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 3 , 500000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 3 , 100000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
-    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2147483652 , 500000, BALANCE);
-    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2147483652 , 100000, BALANCE);
+    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2147483652 , 500000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2147483652 , 100000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
-    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2147483660 , 500000, BALANCE);
-    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2147483660 , 100000, BALANCE);
+    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2147483660 , 500000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2147483660 , 100000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
-    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2147483661 , 500000, BALANCE);
-    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2147483661 , 100000, BALANCE);
+    update_tally_map("mfaiZGBkY4mBqt3PHPD2qWgbaafGa7vR64" , 2147483661 , 500000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+    update_tally_map("mxaYwMv2Brbs7CW9r5aYuEr1jKTSDXg1TH" , 2147483661 , 100000, BALANCE, 0, "Hardcoded initial balance", strprintf("%s line %d",__FUNCTION__,__LINE__));
 #endif
 #endif
   }
@@ -2467,6 +2502,11 @@ int mastercore_init()
   // redundant? do we need to show it both pre-parse and post-parse?  if so let's label the printfs accordingly
   exodus_balance = getMPbalance(exodus_address, OMNI_PROPERTY_MSC, BALANCE);
   file_log("[Snapshot] Exodus balance: %s\n", FormatDivisibleMP(exodus_balance));
+
+  // determine whether we should disable the auditor (default enabled) and initialize it and whether to audit balance changes
+  if (GetBoolArg("-disableauditor", false)) auditorEnabled = false;
+  if (GetBoolArg("-auditbalancechanges", false)) auditBalanceChanges = true;
+  if (auditorEnabled) Auditor_Initialize();
 
   // check out levelDB for the most recently stored alert and load it into global_alert_message then check if expired
   (void) p_txlistdb->setLastAlert(nWaterlineBlock);
@@ -3953,46 +3993,51 @@ int validity = 0;
   return true;
 }
 
-int mastercore_handler_block_begin(int nBlockPrev, CBlockIndex const * pBlockIndex) {
-  if (reorgRecoveryMode > 0) {
-    reorgRecoveryMode = 0;  // clear reorgRecovery here as this is likely re-entrant
+int mastercore_handler_block_begin(int nBlockPrev, CBlockIndex const * pBlockIndex)
+{
+    if (reorgRecoveryMode > 0) {
+        reorgRecoveryMode = 0;  // clear reorgRecovery here as this is likely re-entrant
 
-    // reset states
-    if(!readPersistence()) clear_all_state();
-    p_txlistdb->isMPinBlockRange(pBlockIndex->nHeight, reorgRecoveryMaxHeight, true);
-    t_tradelistdb->deleteAboveBlock(pBlockIndex->nHeight);
-    s_stolistdb->deleteAboveBlock(pBlockIndex->nHeight);
-    reorgRecoveryMaxHeight = 0;
+        // reset states
+        if(!readPersistence()) clear_all_state();
+        p_txlistdb->isMPinBlockRange(pBlockIndex->nHeight, reorgRecoveryMaxHeight, true); // inclusive
+        t_tradelistdb->deleteAboveBlock(pBlockIndex->nHeight-1); // deleteAboveBlock functions are non-inclusive (>blocknum not >=blocknum)
+        s_stolistdb->deleteAboveBlock(pBlockIndex->nHeight-1);
+        reorgRecoveryMaxHeight = 0;
 
+        nWaterlineBlock = GENESIS_BLOCK - 1;
+        if (isNonMainNet()) nWaterlineBlock = START_TESTNET_BLOCK - 1;
+        if (RegTest()) nWaterlineBlock = START_REGTEST_BLOCK - 1;
 
-    nWaterlineBlock = GENESIS_BLOCK - 1;
-    if (isNonMainNet()) nWaterlineBlock = START_TESTNET_BLOCK - 1;
-    if (RegTest()) nWaterlineBlock = START_REGTEST_BLOCK - 1;
+        if (readPersistence()) {
+            int best_state_block = load_most_relevant_state();
+            if (best_state_block < 0) {
+                // unable to recover easily, remove stale stale state bits and reparse from the beginning.
+                clear_all_state();
+            } else {
+                nWaterlineBlock = best_state_block;
+            }
+        }
 
+        // notify the auditor of a reorg
+        if (auditorEnabled) Auditor_NotifyChainReorg(nWaterlineBlock);
 
-    if(readPersistence()) {
-      int best_state_block = load_most_relevant_state();
-      if (best_state_block < 0) {
-        // unable to recover easily, remove stale stale state bits and reparse from the beginning.
-        clear_all_state();
-      } else {
-        nWaterlineBlock = best_state_block;
-      }
+        if (nWaterlineBlock < nBlockPrev) {
+            // scan from the block after the best active block to catch up to the active chain
+            msc_initial_scan(nWaterlineBlock + 1);
+        }
     }
 
-    if (nWaterlineBlock < nBlockPrev) {
-      // scan from the block after the best active block to catch up to the active chain
-      msc_initial_scan(nWaterlineBlock + 1);
+    if (0 < nBlockTop) {
+        if (nBlockTop < nBlockPrev + 1) return 0;
     }
-  }
 
-  if (0 < nBlockTop)
-    if (nBlockTop < nBlockPrev + 1)
-      return 0;
+    // notify the auditor we're about to start processing a block
+    if (auditorEnabled) Auditor_NotifyBlockStart(pBlockIndex);
 
-  (void) eraseExpiredCrowdsale(pBlockIndex);
+    (void) eraseExpiredCrowdsale(pBlockIndex);
 
-  return 0;
+    return 0;
 }
 
 // called once per block, after the block has been processed
@@ -4011,7 +4056,7 @@ int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex,
 // for every new received block must do:
 // 1) remove expired entries from the accept list (per spec accept entries are valid until their blocklimit expiration; because the customer can keep paying BTC for the offer in several installments)
 // 2) update the amount in the Exodus address
-  uint64_t devmsc = 0;
+  int64_t devmsc = 0;
   unsigned int how_many_erased = eraseExpiredAccepts(nBlockNow);
 
   if (how_many_erased)
@@ -4020,6 +4065,9 @@ int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex,
 
   // calculate devmsc as of this block and update the Exodus' balance
   devmsc = calculate_and_update_devmsc(pBlockIndex->GetBlockTime());
+
+  // notify the auditor that the total number of tokens has changed
+  if ((devmsc > 0) && (auditorEnabled)) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, OMNI_PROPERTY_MSC, devmsc, strprintf("Dev MSC award (block: %d)", nBlockNow));
 
   if (msc_debug_exo)
     file_log("devmsc for block %d: %lu, Exodus balance: %lu\n", nBlockNow,
@@ -4036,6 +4084,15 @@ int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex,
   {
     uiInterface.OmniStateChanged();
   }
+
+  // TODO - do we trust countMP enough to rely on it for auditor?  Would save running audits on blocks with no omni transactions (performance gain)
+  // Update - for the purposes of the auditor no we can't trust it - countMP is only incremented for transactions that return 0 all the way through
+  //          parseTransaction() and interpretPacket() but a non-zero return code somewhere along parsing and processing logic does not guarantee the
+  //          state has not been errorneously changed.
+  //          TODO - find a way of incrementing transaction count based on when we detect the marker, not after parsing and packet interpretation (so we can audit only Omni blocks)
+
+  // notify the auditor we've finished processing a block
+  if (auditorEnabled) Auditor_NotifyBlockFinish(pBlockIndex);
 
   // save out the state after this block
   if (writePersistence(nBlockNow))
@@ -4147,7 +4204,16 @@ std::string new_global_alert_message;
         newSP.creation_block = newSP.update_block = chainActive[block]->GetBlockHash();
 
         const unsigned int id = _my_sps->putSP(ecosystem, newSP);
-        update_tally_map(sender, id, nValue, BALANCE);
+
+        // notify the auditor that we've created a new token
+        if (auditorEnabled) Auditor_NotifyPropertyCreated(id);
+
+        // credit the new tokens to the issuer
+        update_tally_map(sender, id, nValue, BALANCE, txid, "Fixed property issuance", strprintf("%s line %d",__FUNCTION__,__LINE__));
+
+        // notify the auditor that we've issued some tokens
+        if (auditorEnabled) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, id, nValue, "Fixed issuance (txid: " + txid.GetHex() + ")");
+
       }
       rc = 0;
       break;
@@ -4190,6 +4256,9 @@ std::string new_global_alert_message;
         const unsigned int id = _my_sps->putSP(ecosystem, newSP);
         my_crowds.insert(std::make_pair(sender, CMPCrowd(id, nValue, property, deadline, early_bird, percentage, 0, 0)));
         file_log("CREATED CROWDSALE id: %u value: %lu property: %u\n", id, nValue, property);  
+
+        // notify the auditor that we've created a new token
+        if (auditorEnabled) Auditor_NotifyPropertyCreated(id);
       }
       rc = 0;
       break;
@@ -4242,7 +4311,7 @@ std::string new_global_alert_message;
         sp.missedTokens = (int64_t) missedTokens;
         _my_sps->updateSP(crowd.getPropertyId() , sp);
         
-        update_tally_map(sp.issuer, crowd.getPropertyId(), missedTokens, BALANCE);
+        update_tally_map(sp.issuer, crowd.getPropertyId(), missedTokens, BALANCE, txid, "Close crowdsale (fractional catchup)", strprintf("%s line %d",__FUNCTION__,__LINE__));
         //End
 
         my_crowds.erase(it);
@@ -4274,6 +4343,9 @@ std::string new_global_alert_message;
 
         const unsigned int id = _my_sps->putSP(ecosystem, newSP);
         file_log("CREATED MANUAL PROPERTY id: %u admin: %s \n", id, sender.c_str());
+
+        // notify the auditor that we've created a new token
+        if (auditorEnabled) Auditor_NotifyPropertyCreated(id);
       }
       rc = 0;
       break;
@@ -4388,12 +4460,12 @@ int invalid = 0;  // unused
       if (receiver.empty()) ++invalid;
 
       // insufficient funds check & return
-      if (!update_tally_map(sender, property, - nValue, BALANCE))
+      if (!update_tally_map(sender, property, - nValue, BALANCE, txid, "Simple Send", strprintf("%s line %d",__FUNCTION__,__LINE__)))
       {
         return (PKT_ERROR -111);
       }
 
-      update_tally_map(receiver, property, nValue, BALANCE);
+      update_tally_map(receiver, property, nValue, BALANCE, txid, "Simple Send", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
       // is there a crowdsale running from this recepient ?
       {
@@ -4463,8 +4535,11 @@ int invalid = 0;  // unused
             //file_log(mp_fp,"\nValues coming out of calculateFundraiser(): hex %s: Tokens created, Tokens for issuer: %ld %ld\n",txid.GetHex().c_str(), tokens.first, tokens.second);
 
             //update sender/rec
-            update_tally_map(sender, crowd->getPropertyId(), tokens.first, BALANCE);
-            update_tally_map(receiver, crowd->getPropertyId(), tokens.second, BALANCE);
+            update_tally_map(sender, crowd->getPropertyId(), tokens.first, BALANCE, txid, "Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__));
+            update_tally_map(receiver, crowd->getPropertyId(), tokens.second, BALANCE, txid, "Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__));
+
+            // notify the auditor that we've created some tokens
+            if (auditorEnabled) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, crowd->getPropertyId(), tokens.first+tokens.second, "Crowdsale Purchase (txid: " + txid.GetHex() + ")");
 
             // close crowdsale if we hit MAX_TOKENS
             if( close_crowdsale ) {
@@ -4567,12 +4642,12 @@ int rc = PKT_ERROR_STO -1000;
         if (itern)
         {
         // real execution of the loop
-          if (!update_tally_map(sender, property, - will_really_receive, BALANCE))
+          if (!update_tally_map(sender, property, - will_really_receive, BALANCE, txid, "Send To Owners", strprintf("%s line %d",__FUNCTION__,__LINE__)))
           {
             return (PKT_ERROR_STO -1);
           }
 
-          update_tally_map(address, property, will_really_receive, BALANCE);
+          update_tally_map(address, property, will_really_receive, BALANCE, txid, "Send To Owners", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
           // add to stodb
           s_stolistdb->recordSTOReceive(address, txid, block, property, will_really_receive);
@@ -4626,10 +4701,13 @@ int rc = PKT_ERROR_STO -1000;
         }
 
         // burn MSC or TMSC here: take the transfer fee away from the sender
-        if (!update_tally_map(sender, feeProperty, - nXferFee, BALANCE))
+        if (!update_tally_map(sender, feeProperty, - nXferFee, BALANCE, txid, "Send To Owners", strprintf("%s line %d",__FUNCTION__,__LINE__)))
         {
           // impossible to reach this, the check was done just before (the check is not necessary since update_tally_map checks balances too)
           return (PKT_ERROR_STO -500);
+        } else {
+            // notify the auditor that we've burned some tokens (reduced the total)
+            if (auditorEnabled) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_DECREASE, feeProperty, nXferFee, "Send To Owners Fee (txid: " + txid.GetHex() + ")");
         }
       } //  if first ITERATION END
 
@@ -4641,6 +4719,7 @@ int rc = PKT_ERROR_STO -1000;
         // rc = ???
       }
     } // two-iteration loop END
+
 
     return rc;
 }

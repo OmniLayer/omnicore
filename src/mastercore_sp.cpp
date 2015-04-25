@@ -541,7 +541,7 @@ CrowdMap::iterator my_it = my_crowds.begin();
      _my_sps->updateSP(crowd.getPropertyId() , sp);
 
       //update values
-      update_tally_map(sp.issuer, crowd.getPropertyId(), missedTokens, BALANCE);
+      update_tally_map(sp.issuer, crowd.getPropertyId(), missedTokens, BALANCE, sp.txid, "Close Expired Crowdsale", strprintf("%s line %d",__FUNCTION__,__LINE__));
       //End
 
       my_crowds.erase(my_it++);

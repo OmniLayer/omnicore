@@ -7,6 +7,7 @@
 #include "mastercore_errors.h"
 #include "mastercore_log.h"
 #include "mastercore_tx.h"
+#include "omnicore_auditor.h"
 
 #include "main.h"
 #include "tinyformat.h"
@@ -221,9 +222,9 @@ const XDOUBLE desprice = (1/buyersprice); // inverse, to be matched against that
         // TODO: do something when failing here............
         // FIXME
         // ...
-        if (update_tally_map(newo->getAddr(), newo->getProperty(), - seller_amountGot, BALANCE))
+        if (update_tally_map(newo->getAddr(), newo->getProperty(), - seller_amountGot, BALANCE, newo->getHash(), "MetaDEx Trade Match (new)", strprintf("%s line %d",__FUNCTION__,__LINE__)))
         {
-          if (update_tally_map(p_older->getAddr(), p_older->getDesProperty(), seller_amountGot, BALANCE))
+          if (update_tally_map(p_older->getAddr(), p_older->getDesProperty(), seller_amountGot, BALANCE, p_older->getHash(), "MetaDEx Trade Match (existing)", strprintf("%s line %d",__FUNCTION__,__LINE__)))
           {
           }
         }
@@ -232,9 +233,9 @@ const XDOUBLE desprice = (1/buyersprice); // inverse, to be matched against that
         // TODO: do something when failing here............
         // FIXME
         // ...
-        if (update_tally_map(p_older->getAddr(), p_older->getProperty(), - buyer_amountGot, METADEX_RESERVE))
+        if (update_tally_map(p_older->getAddr(), p_older->getProperty(), - buyer_amountGot, METADEX_RESERVE, p_older->getHash(), "MetaDEx Trade Match (existing)", strprintf("%s line %d",__FUNCTION__,__LINE__)))
         {
-          update_tally_map(newo->getAddr(), newo->getDesProperty(), buyer_amountGot, BALANCE);
+          update_tally_map(newo->getAddr(), newo->getDesProperty(), buyer_amountGot, BALANCE, newo->getHash(), "MetaDEx Trade Match (new)", strprintf("%s line %d",__FUNCTION__,__LINE__));
         }
 
         NewReturn = TRADED;
@@ -420,9 +421,9 @@ int rc = DEX_ERROR_SELLOFFER;
     if (nAmended) *nAmended = nValue;
   }
 
-  if (update_tally_map(seller_addr, prop, - nValue, BALANCE)) // subtract from what's available
+  if (update_tally_map(seller_addr, prop, - nValue, BALANCE, txid, "DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__))) // subtract from what's available
   {
-    update_tally_map(seller_addr, prop, nValue, SELLOFFER_RESERVE); // put in reserve
+    update_tally_map(seller_addr, prop, nValue, SELLOFFER_RESERVE, txid, "DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__)); // put in reserve
 
     my_offers.insert(std::make_pair(combo, CMPOffer(block, nValue, prop, amount_des, fee, btl, txid)));
 
@@ -442,13 +443,12 @@ const uint64_t amount = getMPbalance(seller_addr, prop, SELLOFFER_RESERVE);
   const string combo = STR_SELLOFFER_ADDR_PROP_COMBO(seller_addr);
 
   OfferMap::iterator my_it;
-
   my_it = my_offers.find(combo);
-
+  
   if (amount)
-  {
-    update_tally_map(seller_addr, prop, amount, BALANCE);   // give back to the seller from SellOffer-Reserve
-    update_tally_map(seller_addr, prop, - amount, SELLOFFER_RESERVE);
+  {  // hash not stored in my_offers so cannot tell auditor what txid was of deleted sell offer
+    update_tally_map(seller_addr, prop, amount, BALANCE, 0, "Erase DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__));   // give back to the seller from SellOffer-Reserve
+    update_tally_map(seller_addr, prop, - amount, SELLOFFER_RESERVE, 0, "Erase DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__));
   }
 
   // delete the offer
@@ -520,9 +520,9 @@ uint64_t nActualAmount = getMPbalance(seller, prop, SELLOFFER_RESERVE);
   }
 
   // TODO: think if we want to save nValue -- as the amount coming off the wire into the object or not
-  if (update_tally_map(seller, prop, - nActualAmount, SELLOFFER_RESERVE))
+  if (update_tally_map(seller, prop, - nActualAmount, SELLOFFER_RESERVE, 0, "DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)))
   {
-    if (update_tally_map(seller, prop, nActualAmount, ACCEPT_RESERVE))
+    if (update_tally_map(seller, prop, nActualAmount, ACCEPT_RESERVE, 0, "DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)))
     {
       // insert into the map !
       my_accepts.insert(std::make_pair(accept_combo, CMPAccept(nActualAmount, block,
@@ -575,18 +575,18 @@ const string accept_combo = STR_ACCEPT_ADDR_PROP_ADDR_COMBO(seller, buyer);
 
   if (bReturnToMoney)
   {
-    if (update_tally_map(seller, prop, - nActualAmount, ACCEPT_RESERVE))
+    if (update_tally_map(seller, prop, - nActualAmount, ACCEPT_RESERVE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)))
     {
-      update_tally_map(seller, prop, nActualAmount, BALANCE);
+      update_tally_map(seller, prop, nActualAmount, BALANCE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__));
       rc = 0;
     }
   }
   else
   {
     // return to SELLOFFER_RESERVE
-    if (update_tally_map(seller, prop, - nActualAmount, ACCEPT_RESERVE))
+    if (update_tally_map(seller, prop, - nActualAmount, ACCEPT_RESERVE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)))
     {
-      update_tally_map(seller, prop, nActualAmount, SELLOFFER_RESERVE);
+      update_tally_map(seller, prop, nActualAmount, SELLOFFER_RESERVE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__));
       rc = 0;
     }
   }
@@ -648,9 +648,9 @@ p_accept = DEx_getAccept(seller, prop, buyer);
     if (nAmended) *nAmended = units_purchased;
   }
 
-  if (update_tally_map(seller, prop, - units_purchased, ACCEPT_RESERVE))
+  if (update_tally_map(seller, prop, - units_purchased, ACCEPT_RESERVE, txid, "DEx Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)))
   {
-      update_tally_map(buyer, prop, units_purchased, BALANCE);
+      update_tally_map(buyer, prop, units_purchased, BALANCE, txid, "DEx Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__));
       rc = 0;
       bool bValid = true;
       p_txlistdb->recordPaymentTX(txid, bValid, blockNow, vout, prop, units_purchased, buyer, seller);
@@ -741,6 +741,9 @@ int rc = METADEX_ERROR -1;
       return METADEX_ERROR -66;
     }
 
+    // insert the original trade price into the audit cache
+    Auditor_NotifyTradeCreated(txid, new_mdex.effectivePrice());
+
     if (msc_debug_metadex3) MetaDEx_debug_print();
 
     // TRADE, check matches, remainder of the order will be put into the order book
@@ -782,11 +785,11 @@ int rc = METADEX_ERROR -1;
       {
         // TODO: think about failure scenarios
         // FIXME
-        if (update_tally_map(sender_addr, prop, - new_mdex.getAmountForSale(), BALANCE)) // subtract from what's available
+        if (update_tally_map(sender_addr, prop, - new_mdex.getAmountForSale(), BALANCE, txid, "MetaDEx Trade", strprintf("%s line %d",__FUNCTION__,__LINE__))) // subtract from what's available
         {
           // TODO: think about failure scenarios
           // FIXME
-          update_tally_map(sender_addr, prop, new_mdex.getAmountForSale(), METADEX_RESERVE); // put in reserve
+          update_tally_map(sender_addr, prop, new_mdex.getAmountForSale(), METADEX_RESERVE, txid, "MetaDEx Trade", strprintf("%s line %d",__FUNCTION__,__LINE__)); // put in reserve
         }
 
         // price check
@@ -851,8 +854,8 @@ const CMPMetaDEx *p_mdex = NULL;
       file_log("%s(): REMOVING %s\n", __FUNCTION__, p_mdex->ToString());
 
       // move from reserve to main
-      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), - p_mdex->getAmountForSale(), METADEX_RESERVE);
-      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountForSale(), BALANCE);
+      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), - p_mdex->getAmountForSale(), METADEX_RESERVE, txid, "MetaDEx Cancel Price", strprintf("%s line %d",__FUNCTION__,__LINE__));
+      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountForSale(), BALANCE, txid, "MetaDEx Cancel Price", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
       // record the cancellation
       bool bValid = true;
@@ -904,8 +907,8 @@ const CMPMetaDEx *p_mdex = NULL;
       file_log("%s(): REMOVING %s\n", __FUNCTION__, p_mdex->ToString());
 
       // move from reserve to main
-      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), - p_mdex->getAmountForSale(), METADEX_RESERVE);
-      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountForSale(), BALANCE);
+      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), - p_mdex->getAmountForSale(), METADEX_RESERVE, txid, "MetaDEx Cancel Pair", strprintf("%s line %d",__FUNCTION__,__LINE__));
+      update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountForSale(), BALANCE, txid, "MetaDEx Cancel Pair", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
       // record the cancellation
       bool bValid = true;
@@ -963,8 +966,8 @@ int mastercore::MetaDEx_CANCEL_EVERYTHING(const uint256& txid, unsigned int bloc
         file_log("%s(): REMOVING %s\n", __FUNCTION__, it->ToString());
 
         // move from reserve to balance
-        update_tally_map(it->getAddr(), it->getProperty(), - it->getAmountForSale(), METADEX_RESERVE);
-        update_tally_map(it->getAddr(), it->getProperty(), it->getAmountForSale(), BALANCE);
+        update_tally_map(it->getAddr(), it->getProperty(), - it->getAmountForSale(), METADEX_RESERVE, txid, "MetaDEx Cancel All", strprintf("%s line %d",__FUNCTION__,__LINE__));
+        update_tally_map(it->getAddr(), it->getProperty(), it->getAmountForSale(), BALANCE, txid, "MetaDEx Cancel All", strprintf("%s line %d",__FUNCTION__,__LINE__));
 
         // record the cancellation
         bool bValid = true;
