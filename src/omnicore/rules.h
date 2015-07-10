@@ -5,6 +5,12 @@
 
 namespace mastercore
 {
+/** Whether we are loading rules during startup
+ */
+extern bool loadingActivations;
+
+/** Fixed hardcoded values for blockheight, used prior to block 350000
+  */
 //! Starting block for parsing in regtest mode
 const int START_REGTEST_BLOCK = 5;
 //! Block to enable the Exodus fundraiser address in regtest mode
@@ -25,15 +31,20 @@ const int MSC_SP_BLOCK = 297110;
 const int MSC_MANUALSP_BLOCK = 323230;
 //! Block to enable send-to-owners transactions
 const int MSC_STO_BLOCK = 342650;
-//! Block to enable MetaDEx transactions
-const int MSC_METADEX_BLOCK = 999999;
-//! Block to enable betting transactions
-const int MSC_BET_BLOCK = 999999;
 //! Block to enable pay-to-script-hash support
 const int P2SH_BLOCK = 322000;
-//! Block to enable OP_RETURN based encoding
-const int OP_RETURN_BLOCK = 999999;
 
+/** Set-by-activation-message values for blockheight, used after block 350000
+ */
+//! Block to enable OP_RETURN based encoding
+extern int OP_RETURN_BLOCK;
+//! Block to enable MetaDEx transactions
+extern int MSC_METADEX_BLOCK;
+//! Block to enable betting transactions
+extern int MSC_BET_BLOCK;
+
+/** Activate a feature (set the live block) */
+bool ActivateFeature(int featureId, int activationBlock);
 /** Checks, if the script type is allowed as input. */
 bool IsAllowedInputType(int whichType, int nBlock);
 /** Checks, if the script type qualifies as output. */
