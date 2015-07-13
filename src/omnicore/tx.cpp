@@ -1578,7 +1578,7 @@ int CMPTransaction::logicMath_Activation()
     }
 
     // authorized, request feature activation
-    bool activationSuccess = ActivateFeature(feature_id, activation_block);
+    bool activationSuccess = ActivateFeature(feature_id, activation_block, block);
 
     if (!activationSuccess) {
         PrintToLog("%s(): ActivateFeature failed to activate this feature\n", __func__);

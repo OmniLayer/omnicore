@@ -99,12 +99,12 @@ bool IsAllowedOutputType(int whichType, int nBlock)
  *       than 12288 blocks (roughly 12 weeks) to ensure sufficient notice.
  *       This does not apply for activation during initialization (where loadingActivations is set true).
  */
-bool ActivateFeature(int featureId, int activationBlock)
+bool ActivateFeature(int featureId, int activationBlock, int currentBlock)
 {
     PrintToLog("Feature activation requested (ID %d to go active as of block: %d)\n", featureId, activationBlock);
 
     // check activation block is allowed
-    if (!loadingActivations && (GetHeight()+2048 < activationBlock || activationBlock > GetHeight()+12288)) {
+    if (!loadingActivations && (currentBlock + MIN_ACTIVATION_BLOCKS < activationBlock || activationBlock > currentBlock + MAX_ACTIVATION_BLOCKS)) {
         PrintToLog("Feature activation of ID %d refused due to notice checks\n", featureId);
         return false;
     }
