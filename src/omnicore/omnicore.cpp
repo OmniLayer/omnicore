@@ -2653,9 +2653,7 @@ int mastercore_init()
     p_txlistdb->setLastAlert(nWaterlineBlock);
 
     // load feature activation messages from txlistdb and process them accordingly
-    loadingActivations = true;
-    p_txlistdb->LoadActivations(nWaterlineBlock);
-    loadingActivations = false;
+    p_txlistdb->LoadActivations();
 
     // initial scan
     msc_initial_scan(nWaterlineBlock);
@@ -2965,7 +2963,7 @@ int mastercore::ClassAgnosticWalletTXBuilder(const std::string& senderAddress, c
     }
 }
 
-void CMPTxList::LoadActivations(int blockHeight)
+void CMPTxList::LoadActivations()
 {
     if (!pdb) return;
 
@@ -2993,6 +2991,16 @@ void CMPTxList::LoadActivations(int blockHeight)
            PrintToLog("ERROR: While loading activation transaction %s: tx in levelDB but does not exist.\n", hash.GetHex());
            continue;
        }
+       if ((0 == blockHash) || (NULL == GetBlockIndex(blockHash))) {
+           PrintToLog("ERROR: While loading activation transaction %s: failed to retrieve block hash.\n", hash.GetHex());
+           continue;
+       }
+       CBlockIndex* pBlockIndex = GetBlockIndex(blockHash);
+       if (NULL == pBlockIndex) {
+           PrintToLog("ERROR: While loading activation transaction %s: failed to retrieve block index.\n", hash.GetHex());
+           continue;
+       }
+       int blockHeight = pBlockIndex->nHeight;
        if (0 != ParseTransaction(wtx, blockHeight, 0, mp_obj)) {
            PrintToLog("ERROR: While loading activation transaction %s: failed ParseTransaction.\n", hash.GetHex());
            continue;

@@ -17,10 +17,6 @@
 namespace mastercore
 {
 
-/** Whether we are loading activations during startup
- */
-bool loadingActivations = false;
-
 /** Default block for all feature activations is 999999 until set by ActivateFeature()
  */
 int OP_RETURN_BLOCK = 999999;
@@ -99,12 +95,12 @@ bool IsAllowedOutputType(int whichType, int nBlock)
  *       than 12288 blocks (roughly 12 weeks) to ensure sufficient notice.
  *       This does not apply for activation during initialization (where loadingActivations is set true).
  */
-bool ActivateFeature(int featureId, int activationBlock, int currentBlock)
+bool ActivateFeature(int featureId, int activationBlock, int transactionBlock)
 {
     PrintToLog("Feature activation requested (ID %d to go active as of block: %d)\n", featureId, activationBlock);
 
     // check activation block is allowed
-    if (!loadingActivations && (currentBlock + MIN_ACTIVATION_BLOCKS < activationBlock || activationBlock > currentBlock + MAX_ACTIVATION_BLOCKS)) {
+    if (transactionBlock + MIN_ACTIVATION_BLOCKS < activationBlock || activationBlock > transactionBlock + MAX_ACTIVATION_BLOCKS) {
         PrintToLog("Feature activation of ID %d refused due to notice checks\n", featureId);
         return false;
     }

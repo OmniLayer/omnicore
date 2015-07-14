@@ -5,10 +5,6 @@
 
 namespace mastercore
 {
-/** Whether we are loading rules during startup
- */
-extern bool loadingActivations;
-
 /** The amount of blocks to use for notice rules on activation
   */
 const int MIN_ACTIVATION_BLOCKS = 2048; // ~2 weeks
@@ -49,7 +45,7 @@ extern int MSC_METADEX_BLOCK;
 extern int MSC_BET_BLOCK;
 
 /** Activate a feature (set the live block) */
-bool ActivateFeature(int featureId, int activationBlock, int currentBlock);
+bool ActivateFeature(int featureId, int activationBlock, int transactionBlock);
 /** Checks, if the script type is allowed as input. */
 bool IsAllowedInputType(int whichType, int nBlock);
 /** Checks, if the script type qualifies as output. */
