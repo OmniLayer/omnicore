@@ -8,6 +8,7 @@
 
 #include "omnicore/log.h"
 #include "omnicore/omnicore.h"
+#include "omnicore/notifications.h"
 #include "omnicore/utilsbitcoin.h"
 
 #include "chainparams.h"
@@ -167,7 +168,7 @@ CTestNetConsensusParams::CTestNetConsensusParams()
     LAST_EXODUS_BLOCK = std::numeric_limits<int>::max();
     // Notice range for feature activations:
     MIN_ACTIVATION_BLOCKS = 0;
-    MAX_ACTIVATION_BLOCKS = std::numeric_limits<int>::max();
+    MAX_ACTIVATION_BLOCKS = 999999;
     // Script related:
     PUBKEYHASH_BLOCK = 0;
     SCRIPTHASH_BLOCK = 0;
@@ -318,8 +319,9 @@ bool ActivateFeature(uint16_t featureId, int activationBlock, int transactionBlo
     const CConsensusParams& params = ConsensusParams();
 
     // check activation block is allowed
-    if ((activationBlock < (transactionBlock + params.MIN_ACTIVATION_BLOCKS)) ||
-        (activationBlock > (transactionBlock + params.MAX_ACTIVATION_BLOCKS))) {
+    if ( ((transactionBlock + params.MIN_ACTIVATION_BLOCKS) > activationBlock) ||
+         (activationBlock > (transactionBlock + params.MAX_ACTIVATION_BLOCKS)) ) {
+PrintToConsole("act %d a %d b %d\n", activationBlock, transactionBlock + params.MIN_ACTIVATION_BLOCKS, transactionBlock + params.MAX_ACTIVATION_BLOCKS);
         PrintToLog("Feature activation of ID %d refused due to notice checks\n", featureId);
         return false;
     }
@@ -329,14 +331,17 @@ bool ActivateFeature(uint16_t featureId, int activationBlock, int transactionBlo
         case OMNICORE_FEATURE_CLASS_C:
             MutableConsensusParams().NULLDATA_BLOCK = activationBlock;
             PrintToLog("Feature activation of ID %d succeeded, OP_RETURN block is now %d\n", featureId, params.NULLDATA_BLOCK);
+            AddAlert(1, activationBlock, strprintf("Feature %d ('Class C') will go live at block %d", featureId, activationBlock));
             return true;
         case OMNICORE_FEATURE_METADEX:
             MutableConsensusParams().MSC_METADEX_BLOCK = activationBlock;
             PrintToLog("Feature activation of ID %d succeeded, MSC_METADEX_BLOCK is now %d\n", featureId, params.MSC_METADEX_BLOCK);
+            AddAlert(1, activationBlock, strprintf("Feature %d ('MetaDEx') will go live at block %d", featureId, activationBlock));
             return true;
         case OMNICORE_FEATURE_BETTING:
             MutableConsensusParams().MSC_BET_BLOCK = activationBlock;
             PrintToLog("Feature activation of ID %d succeeded, MSC_BET_BLOCK is now %d\n", featureId, params.MSC_BET_BLOCK);
+            AddAlert(1, activationBlock, strprintf("Feature %d ('Betting') will go live at block %d", featureId, activationBlock));
             return true;
     }
 

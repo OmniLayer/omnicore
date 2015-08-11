@@ -81,7 +81,9 @@ private:
     unsigned char subaction;
 
     // Alert
-    char alertString[SP_STRING_FIELD_LEN];
+    uint16_t alert_type;
+    uint32_t alert_expiry;
+    char alert_text[SP_STRING_FIELD_LEN];
 
     // Activation
     uint16_t feature_id;
@@ -172,8 +174,10 @@ public:
     uint64_t getAmount() const { return nValue; }
     uint64_t getNewAmount() const { return nNewValue; }
     std::string getSPName() const { return name; }
-    std::string getAlertString() const { return alertString; }
     bool isRpcOnly() const { return rpcOnly; }
+    uint16_t getAlertType() const { return alert_type; }
+    uint32_t getAlertExpiry() const { return alert_expiry; }
+    std::string getAlertMessage() const { return alert_text; }
 
     /** Creates a new CMPTransaction object. */
     CMPTransaction()
@@ -217,7 +221,9 @@ public:
         blocktimelimit = 0;
         min_fee = 0;
         subaction = 0;
-        memset(&alertString, 0, sizeof(alertString));
+        alert_type = 0;
+        alert_expiry = 0;
+        memset(&alert_text, 0, sizeof(alert_text));
         rpcOnly = true;
     }
 

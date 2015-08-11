@@ -361,6 +361,7 @@ BOOST_AUTO_TEST_CASE(payload_change_property_manager)
     BOOST_CHECK_EQUAL(HexStr(vch), "000000460000000d");
 }
 
+/*
 BOOST_AUTO_TEST_CASE(payload_omnicore_alert)
 {
     // Omni Core client notification [type 65535, version 65535]
@@ -373,6 +374,6 @@ BOOST_AUTO_TEST_CASE(payload_omnicore_alert)
 
     BOOST_CHECK_EQUAL(HexStr(vch), "ffffffff333a3930303130303a303a303a7465737400");
 }
-
+*/
 
 BOOST_AUTO_TEST_SUITE_END()
