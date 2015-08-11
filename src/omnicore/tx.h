@@ -183,12 +183,14 @@ public:
     int64_t getDeadline() const { return deadline; }
     uint8_t getEarlyBirdBonus() const { return early_bird; }
     uint8_t getIssuerBonus() const { return percentage; }
-    std::string getAlertString() const { return alertString; }
     bool isRpcOnly() const { return rpcOnly; }
     uint16_t getAlertType() const { return alert_type; }
     uint32_t getAlertExpiry() const { return alert_expiry; }
     std::string getAlertMessage() const { return alert_text; }
     int getEncodingClass() const { return encodingClass; }
+    uint16_t getAlertType() const { return alert_type; }
+    uint32_t getAlertExpiry() const { return alert_expiry; }
+    std::string getAlertMessage() const { return alert_text; }
 
     /** Creates a new CMPTransaction object. */
     CMPTransaction()
