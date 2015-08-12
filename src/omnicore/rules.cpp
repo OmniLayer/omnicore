@@ -316,11 +316,10 @@ bool ActivateFeature(uint16_t featureId, int activationBlock, int transactionBlo
     const CConsensusParams& params = ConsensusParams();
 
     // check activation block is allowed
-    if ( ((transactionBlock + params.MIN_ACTIVATION_BLOCKS) > activationBlock) ||
-         (activationBlock > (transactionBlock + params.MAX_ACTIVATION_BLOCKS)) ) {
-PrintToConsole("act %d a %d b %d\n", activationBlock, transactionBlock + params.MIN_ACTIVATION_BLOCKS, transactionBlock + params.MAX_ACTIVATION_BLOCKS);
-        PrintToLog("Feature activation of ID %d refused due to notice checks\n", featureId);
-        return false;
+    if ((activationBlock < (transactionBlock + params.MIN_ACTIVATION_BLOCKS)) ||
+        (activationBlock > (transactionBlock + params.MAX_ACTIVATION_BLOCKS))) {
+            PrintToLog("Feature activation of ID %d refused due to notice checks\n", featureId);
+            return false;
     }
 
     // check feature is recognized and activation is successful
