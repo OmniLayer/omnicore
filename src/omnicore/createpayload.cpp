@@ -379,6 +379,26 @@ std::vector<unsigned char> CreatePayload_MetaDExCancelEcosystem(uint8_t ecosyste
     return payload;
 }
 
+std::vector<unsigned char> CreatePayload_ActivateFeature(uint16_t featureId, uint32_t activationBlock)
+{
+    std::vector<unsigned char> payload;
+
+    uint16_t messageVer = 65535;
+    uint16_t messageType = 65534;
+
+    mastercore::swapByteOrder16(messageVer);
+    mastercore::swapByteOrder16(messageType);
+    mastercore::swapByteOrder16(featureId);
+    mastercore::swapByteOrder32(activationBlock);
+
+    PUSH_BACK_BYTES(payload, messageVer);
+    PUSH_BACK_BYTES(payload, messageType);
+    PUSH_BACK_BYTES(payload, featureId);
+    PUSH_BACK_BYTES(payload, activationBlock);
+
+    return payload;
+}
+
 std::vector<unsigned char> CreatePayload_OmniCoreAlert(uint16_t alertType, uint32_t expiryValue, const std::string& alertMessage)
 {
     std::vector<unsigned char> payload;
