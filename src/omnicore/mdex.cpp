@@ -495,6 +495,11 @@ int mastercore::MetaDEx_CANCEL_AT_PRICE(const uint256& txid, unsigned int block,
 
     int numCancelled = 0;
 
+    if (!prices) {
+        PrintToLog("%s(): FOUND 0 MATCHING TRADES (no active trades selling property %d).\n", __FUNCTION__, prop);
+        return 0; // cancels do not require matching trades to be valid
+    }
+
     // within the desired property map (given one property) iterate over the items
     for (md_PricesMap::iterator my_it = prices->begin(); my_it != prices->end(); ++my_it) {
         rational_t sellers_price = my_it->first;
@@ -549,6 +554,11 @@ int mastercore::MetaDEx_CANCEL_ALL_FOR_PAIR(const uint256& txid, unsigned int bl
     if (msc_debug_metadex3) MetaDEx_debug_print();
 
     int numCancelled = 0;
+
+    if (!prices) {
+        PrintToLog("%s(): FOUND 0 MATCHING TRADES (no active trades selling property %d).\n", __FUNCTION__, prop);
+        return 0; // cancels do not require matching trades to be valid
+    }
 
     // within the desired property map (given one property) iterate over the items
     for (md_PricesMap::iterator my_it = prices->begin(); my_it != prices->end(); ++my_it) {
