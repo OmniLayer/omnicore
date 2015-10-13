@@ -244,6 +244,7 @@ void populateRPCTypeSimpleSend(CMPTransaction& omniObj, Object& txobj)
         txobj.push_back(Pair("propertyid", (uint64_t)propertyId));
         txobj.push_back(Pair("divisible", isPropertyDivisible(propertyId)));
         txobj.push_back(Pair("amount", FormatMP(propertyId, omniObj.getAmount())));
+        txobj.push_back(Pair("memo", omniObj.getMemo()));
     }
 }
 

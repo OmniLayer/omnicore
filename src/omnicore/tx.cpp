@@ -199,6 +199,19 @@ bool CMPTransaction::interpret_SimpleSend()
         PrintToLog("\t           value: %s\n", FormatMP(property, nValue));
     }
 
+    if (version == MP_TX_PKT_V1 && pkt_size > 16) {
+        const char* p = 16 + (char*) &pkt;
+        std::string memostr(p);
+        memcpy(memo, memostr.c_str(), std::min(memostr.length(), sizeof(memo)-1));
+        if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
+            PrintToLog("\t            memo: %s\n", memo);
+        }
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
+    }
+
     return true;
 }
 

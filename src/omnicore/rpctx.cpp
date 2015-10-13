@@ -48,8 +48,9 @@ Value omni_send(const Array& params, bool fHelp)
             "2. toaddress            (string, required) the address of the receiver\n"
             "3. propertyid           (number, required) the identifier of the tokens to send\n"
             "4. amount               (string, required) the amount to send\n"
-            "5. redeemaddress        (string, optional) an address that can spend the transaction dust (sender by default)\n"
-            "6. referenceamount      (string, optional) a bitcoin amount that is sent to the receiver (minimal by default)\n"
+            "5. memo                 (string, optional) attach a note to the transaction\n"
+            "6. redeemaddress        (string, optional) an address that can spend the transaction dust (sender by default)\n"
+            "7. referenceamount      (string, optional) a bitcoin amount that is sent to the receiver (minimal by default)\n"
 
             "\nResult:\n"
             "\"hash\"                  (string) the hex-encoded transaction hash\n"
@@ -64,8 +65,9 @@ Value omni_send(const Array& params, bool fHelp)
     std::string toAddress = ParseAddress(params[1]);
     uint32_t propertyId = ParsePropertyId(params[2]);
     int64_t amount = ParseAmount(params[3], isPropertyDivisible(propertyId));
-    std::string redeemAddress = (params.size() > 4 && !ParseText(params[4]).empty()) ? ParseAddress(params[4]): "";
-    int64_t referenceAmount = (params.size() > 5) ? ParseAmount(params[5], true): 0;
+    std::string memo = (params.size() > 4) ? ParseText(params[4]) : "";
+    std::string redeemAddress = (params.size() > 5 && !ParseText(params[5]).empty()) ? ParseAddress(params[5]): "";
+    int64_t referenceAmount = (params.size() > 6) ? ParseAmount(params[6], true): 0;
 
     // perform checks
     RequireExistingProperty(propertyId);
@@ -73,7 +75,7 @@ Value omni_send(const Array& params, bool fHelp)
     RequireSaneReferenceAmount(referenceAmount);
 
     // create a payload for the transaction
-    std::vector<unsigned char> payload = CreatePayload_SimpleSend(propertyId, amount);
+    std::vector<unsigned char> payload = CreatePayload_SimpleSend(propertyId, amount, memo);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;

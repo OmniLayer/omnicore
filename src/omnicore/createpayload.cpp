@@ -1,7 +1,6 @@
 // This file serves to provide payload creation functions.
 
 #include "omnicore/createpayload.h"
-
 #include "omnicore/convert.h"
 
 #include "tinyformat.h"
@@ -25,11 +24,11 @@
     reinterpret_cast<unsigned char *>((ptr)) + (size));
 
 
-std::vector<unsigned char> CreatePayload_SimpleSend(uint32_t propertyId, uint64_t amount)
+std::vector<unsigned char> CreatePayload_SimpleSend(uint32_t propertyId, uint64_t amount, std::string memo)
 {
     std::vector<unsigned char> payload;
     uint16_t messageType = 0;
-    uint16_t messageVer = 0;
+    uint16_t messageVer = memo.empty() ? 0 : 1;
     mastercore::swapByteOrder16(messageType);
     mastercore::swapByteOrder16(messageVer);
     mastercore::swapByteOrder32(propertyId);
@@ -39,6 +38,11 @@ std::vector<unsigned char> CreatePayload_SimpleSend(uint32_t propertyId, uint64_
     PUSH_BACK_BYTES(payload, messageType);
     PUSH_BACK_BYTES(payload, propertyId);
     PUSH_BACK_BYTES(payload, amount);
+    if (!memo.empty()) {
+        if (memo.size() > 255) memo = memo.substr(0,255);
+        payload.insert(payload.end(), memo.begin(), memo.end());
+        payload.push_back('\0');
+    }
 
     return payload;
 }

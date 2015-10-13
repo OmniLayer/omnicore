@@ -41,6 +41,7 @@ std::vector<TransactionRestriction> CConsensusParams::GetRestrictions() const
         { OMNICORE_MESSAGE_TYPE_ACTIVATION,   0xFFFF,        true,    MSC_ALERT_BLOCK    },
 
         { MSC_TYPE_SIMPLE_SEND,               MP_TX_PKT_V0,  false,   MSC_SEND_BLOCK     },
+        { MSC_TYPE_SIMPLE_SEND,               MP_TX_PKT_V1,  false,   MSC_SEND_BLOCK     },
 
         { MSC_TYPE_TRADE_OFFER,               MP_TX_PKT_V0,  false,   MSC_DEX_BLOCK      },
         { MSC_TYPE_TRADE_OFFER,               MP_TX_PKT_V1,  false,   MSC_DEX_BLOCK      },

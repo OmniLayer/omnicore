@@ -54,6 +54,9 @@ private:
     // CreatePropertyMananged, GrantTokens, RevokeTokens, ChangeIssuer
     unsigned int property;
 
+    // SimpleSend, [future] GrantTokens, RevokeTokens
+    char memo[SP_STRING_FIELD_LEN];
+
     // CreatePropertyFixed, CreatePropertyVariable, CreatePropertyMananged, MetaDEx, SendAll
     unsigned char ecosystem;
 
@@ -171,6 +174,7 @@ public:
     unsigned short getVersion() const { return version; }
     unsigned short getPropertyType() const { return prop_type; }
     uint64_t getFeePaid() const { return tx_fee_paid; }
+    std::string getMemo() const { return memo; }
     std::string getSender() const { return sender; }
     std::string getReceiver() const { return receiver; }
     std::string getPayload() const { return HexStr(pkt, pkt + pkt_size); }
@@ -215,6 +219,7 @@ public:
         version = 0;
         nValue = 0;
         nNewValue = 0;
+        memset(&memo, 0, sizeof(memo));
         property = 0;
         ecosystem = 0;
         prop_type = 0;
