@@ -6,6 +6,7 @@
 
 #include "omnicore/rpc.h"
 
+#include "omnicore/apiconnector.h"
 #include "omnicore/activation.h"
 #include "omnicore/convert.h"
 #include "omnicore/dex.h"
@@ -1710,4 +1711,77 @@ Value omni_getcurrentconsensushash(const Array& params, bool fHelp)
     response.push_back(Pair("consensushash", consensusHash.GetHex()));
 
     return response;
+}
+
+Value omni_searchupdate(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "omni_searchupdate\n"
+            "Searches for updates related to a particular transaction or block.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"updatesequencenumber\" : n,              (number) the usn of the state change\n"
+            "  \"updatetype\" : \"xxxxxxxx\",             (string) the type of state change\n"
+            "  \"updatedelta\": {                         (JSON object) an object containing the changed data\n"
+            "    {\n"
+            "      \"changedattribute\" : \"xxxxxxxx\", (varies) changed attribute value\n"
+            "      \"changedattribute\" : \"xxxxxxxx\", (varies) changed attribute value\n"
+            "      \"changedattribute\" : \"xxxxxxxx\", (varies) changed attribute value\n"
+            "      ...\n"
+            "    }\n"
+            "  }\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_searchupdate", "blockhash/txid")
+            + HelpExampleRpc("omni_searchupdate", "blockhash/txid")
+        );
+
+    uint256 hash = ParseHashV(params[0], "hash");
+
+    Array updateArray;
+    LOCK(cs_tally);
+    _updateDB->searchUpdates(hash, &updateArray);
+
+    return updateArray;
+}
+
+Value omni_getupdate(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() > 2)
+        throw runtime_error(
+            "omni_getupdate\n"
+            "Returns the change information for an updates unique sequence number.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"updatesequencenumber\" : n,              (number) the usn of the state change\n"
+            "  \"updatetype\" : \"xxxxxxxx\",             (string) the type of state change\n"
+            "  \"updatedelta\": {                         (JSON object) an object containing the changed data\n"
+            "    {\n"
+            "      \"changedattribute\" : \"xxxxxxxx\", (varies) changed attribute value\n"
+            "      \"changedattribute\" : \"xxxxxxxx\", (varies) changed attribute value\n"
+            "      \"changedattribute\" : \"xxxxxxxx\", (varies) changed attribute value\n"
+            "      ...\n"
+            "    }\n"
+            "  }\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getupdate", "3")
+            + HelpExampleRpc("omni_getupdate", "3")
+        );
+
+    uint64_t startUSN = 0;
+    uint64_t endUSN = 0;
+    if (0 < params.size()) startUSN = atoi(params[0].get_str());
+    if (1 < params.size()) {
+        endUSN = atoi(params[1].get_str());
+    } else {
+        endUSN = startUSN;
+    }
+
+    Array updateArray;
+    LOCK(cs_tally);
+    _updateDB->getUpdates(startUSN, endUSN, &updateArray);
+
+    return updateArray;
 }

@@ -6,6 +6,7 @@
 
 #include "omnicore/dex.h"
 
+#include "omnicore/apiconnector.h"
 #include "omnicore/convert.h"
 #include "omnicore/errors.h"
 #include "omnicore/log.h"
@@ -191,6 +192,9 @@ int DEx_offerCreate(const std::string& addressSeller, uint32_t propertyId, int64
         CMPOffer sellOffer(block, amountOffered, propertyId, amountDesired, minAcceptFee, paymentWindow, txid);
         my_offers.insert(std::make_pair(key, sellOffer));
 
+        // notify API of new DEx Offer
+        APIPost(APICreateDExSellNotification(addressSeller, amountOffered, propertyId, amountDesired, minAcceptFee, paymentWindow));
+
         rc = 0;
     }
 
@@ -222,6 +226,9 @@ int DEx_offerDestroy(const std::string& addressSeller, uint32_t propertyId)
     const std::string key = STR_SELLOFFER_ADDR_PROP_COMBO(addressSeller, propertyId);
     OfferMap::iterator it = my_offers.find(key);
     my_offers.erase(it);
+
+    // notify API of DEx offer deletion
+    APIPost(APICreateDExDestroyNotification(addressSeller, amountReserved, propertyId));
 
     if (msc_debug_dex) PrintToLog("%s(%s|%s)\n", __func__, addressSeller, key);
 
@@ -304,6 +311,9 @@ int DEx_acceptCreate(const std::string& addressBuyer, const std::string& address
         CMPAccept acceptOffer(nActualAmount, block, offer.getBlockTimeLimit(), offer.getProperty(), offer.getOfferAmountOriginal(), offer.getBTCDesiredOriginal(), offer.getHash());
         my_accepts.insert(std::make_pair(keyAcceptOrder, acceptOffer));
 
+        // notify API of new accept
+        APIPost(APICreateDExAcceptNotification(addressSeller, offer.getHash(), nActualAmount, offer.getProperty(), offer.getOfferAmountOriginal(), offer.getBTCDesiredOriginal(), offer.getBlockTimeLimit()));
+
         rc = 0;
     }
 
@@ -367,6 +377,9 @@ int DEx_acceptDestroy(const std::string& addressBuyer, const std::string& addres
             my_accepts.erase(it);
         }
     }
+
+    // notify API of destroyed accept
+    APIPost(APICreateDExAcceptDestroyNotification(addressSeller, addressBuyer, propertyid, amountRemaining, fForceErase));
 
     rc = 0;
     return rc;
@@ -521,6 +534,9 @@ int DEx_payment(const uint256& txid, unsigned int vout, const std::string& addre
             DEx_offerDestroy(addressSeller, propertyId);
         }
     }
+
+    // notify API of DEx trade
+    APIPost(APICreateDExTradeNotification(addressSeller, addressBuyer, propertyId, amountPurchased, amountPaid));
 
     return rc;
 }

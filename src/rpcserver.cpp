@@ -377,6 +377,8 @@ static const CRPCCommand vRPCCommands[] =
     { "omni layer (data retrieval)",         "omni_gettradehistoryforaddress",  &omni_gettradehistoryforaddress,  false,      true,       false },
     { "omni layer (data retrieval)",         "omni_gettradehistoryforpair",     &omni_gettradehistoryforpair,     false,      true,       false },
     { "omni layer (data retrieval)",         "omni_getcurrentconsensushash",    &omni_getcurrentconsensushash,    false,      true,       false },
+    { "omni layer (data retrieval)",         "omni_getupdate",                  &omni_getupdate,                  false,      true,       false },
+    { "omni layer (data retrieval)",         "omni_searchupdate",               &omni_searchupdate,               false,      true,       false },
 #ifdef ENABLE_WALLET
     { "omni layer (data retrieval)",         "omni_listtransactions",           &omni_listtransactions,           false,      true,       true },
 

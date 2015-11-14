@@ -39,6 +39,11 @@ int const MAX_STATE_HISTORY = 50;
 // increment this value to force a refresh of the state (similar to --startclean)
 #define DB_VERSION 3
 
+// trigger types (objects being processed)
+#define UPDATE_TRIGGER_UNKNOWN      0
+#define UPDATE_TRIGGER_BLOCK        1
+#define UPDATE_TRIGGER_TRANSACTION  2
+
 // could probably also use: int64_t maxInt64 = std::numeric_limits<int64_t>::max();
 // maximum numeric values from the spec:
 #define MAX_INT_8_BYTES (9223372036854775807UL)
@@ -136,6 +141,7 @@ std::string FormatDivisibleShortMP(int64_t amount);
 std::string FormatMP(uint32_t propertyId, int64_t amount, bool fSign = false);
 std::string FormatShortMP(uint32_t propertyId, int64_t amount);
 std::string FormatByType(int64_t amount, uint16_t propertyType);
+std::string FormatAmountMP(uint32_t propertyId, int64_t amount, bool fSign = false);
 
 /** Returns the Exodus address. */
 const CBitcoinAddress ExodusAddress();
@@ -146,11 +152,44 @@ const CBitcoinAddress ExodusCrowdsaleAddress(int nBlock = 0);
 /** Returns the marker for class C transactions. */
 const std::vector<unsigned char> GetOmMarker();
 
+//** Triggers for updates */
+extern int currentTrigger;
+extern std::string currentTriggerObject;
+
+//** The current USN */
+extern uint64_t usn;
+
 //! Used to indicate, whether to automatically commit created transactions
 extern bool autoCommit;
 
 //! Global lock for state objects
 extern CCriticalSection cs_tally;
+
+/** LevelDB based storage for updates to the state.
+ */
+class COmniUpdateDB : public CDBBase
+{
+public:
+    COmniUpdateDB(const boost::filesystem::path& path, bool fWipe)
+    {
+        leveldb::Status status = Open(path, fWipe);
+        PrintToConsole("Loading state updates database: %s\n", status.ToString());
+    }
+
+    virtual ~COmniUpdateDB()
+    {
+        if (msc_debug_persistence) PrintToLog("COmniUpdateDB closed\n");
+    }
+
+    uint64_t LoadUSN();
+    void recordUpdate(uint64_t usn, const std::string& data);
+    int rollbackBlock(const uint256& blockHash);
+    void printStats();
+    void printAll();
+    bool exists(uint64_t usn);
+    void getUpdates(uint64_t startUSN, uint64_t endUSN, json_spirit::Array *updateArray);
+    void searchUpdates(const uint256& hash, json_spirit::Array *updateArray);
+};
 
 /** LevelDB based storage for STO recipients.
  */
@@ -285,6 +324,7 @@ extern std::map<std::string, CMPTally> mp_tally_map;
 extern CMPTxList *p_txlistdb;
 extern CMPTradeList *t_tradelistdb;
 extern CMPSTOList *s_stolistdb;
+extern COmniUpdateDB *_updateDB;
 
 // TODO: move, rename
 extern CCoinsView viewDummy;

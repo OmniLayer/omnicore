@@ -7,6 +7,7 @@
 #include "omnicore/omnicore.h"
 
 #include "omnicore/activation.h"
+#include "omnicore/apiconnector.h"
 #include "omnicore/convert.h"
 #include "omnicore/dex.h"
 #include "omnicore/encoding.h"
@@ -106,6 +107,8 @@ static const string getmoney_testnet = "moneyqMan7uh8FqdCA2BV5yZ8qVrc9ikLP";
 
 static int nWaterlineBlock = 0;
 
+static bool bypassUpdateDB = false;
+
 //! Available balances of wallet properties
 std::map<uint32_t, int64_t> global_balance_money;
 //! Reserved balances of wallet propertiess
@@ -123,6 +126,13 @@ bool autoCommit = true;
 //! Number of "Dev MSC" of the last processed block
 static int64_t exodus_prev = 0;
 
+//! The current trigger (object being processed (transaction, block etc))
+int currentTrigger = UPDATE_TRIGGER_UNKNOWN;
+std::string currentTriggerObject;
+
+//! The current USN
+uint64_t usn = 0;
+
 static boost::filesystem::path MPPersistencePath;
 
 static int mastercoreInitialized = 0;
@@ -133,6 +143,7 @@ static int reorgRecoveryMaxHeight = 0;
 CMPTxList *mastercore::p_txlistdb;
 CMPTradeList *mastercore::t_tradelistdb;
 CMPSTOList *mastercore::s_stolistdb;
+COmniUpdateDB *mastercore::_updateDB;
 
 // indicate whether persistence is enabled at this point, or not
 // used to write/read files, for breakout mode, debugging, etc.
@@ -181,6 +192,18 @@ std::string FormatDivisibleShortMP(int64_t n)
             str.erase(it);
         }
     } //get rid of trailing dot if non decimal
+    return str;
+}
+
+std::string FormatAmountMP(uint32_t propertyId, int64_t amount, bool fSign)
+{
+    std::string str;
+    if (isPropertyDivisible(propertyId)) {
+        str = FormatDivisibleMP(amount);
+    } else {
+        str = FormatIndivisibleMP(amount);
+    }
+    if (amount < 0) str.insert((unsigned int) 0, 1, '-');
     return str;
 }
 
@@ -390,6 +413,11 @@ bool mastercore::update_tally_map(const std::string& who, uint32_t propertyId, i
     }
     if (msc_debug_tally && (exodus_address != who || msc_debug_exo)) {
         PrintToLog("%s(%s, %u=0x%X, %+d, ttype=%d): before=%d, after=%d\n", __func__, who, propertyId, propertyId, amount, ttype, before, after);
+    }
+
+    // notify API of balance change
+    if (bRet && !bypassUpdateDB) {
+        APIPost(APICreateBalanceNotification(who, amount, propertyId));
     }
 
     return bRet;
@@ -1219,7 +1247,8 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
         return -101;
     }
 
-    assert(view.HaveInputs(wtx));
+    
+assert(view.HaveInputs(wtx));
 
     // ### SENDER IDENTIFICATION ###
     std::string strSender;
@@ -2566,6 +2595,7 @@ static void clear_all_state()
     p_txlistdb->Clear();
     s_stolistdb->Clear();
     t_tradelistdb->Clear();
+    _updateDB->Clear();
     assert(p_txlistdb->setDBVersion() == DB_VERSION); // new set of databases, set DB version
     exodus_prev = 0;
 }
@@ -2604,6 +2634,9 @@ int mastercore_init()
         autoCommit = false;
     }
 
+    // check for --omniapiurl option and activate API
+    APIInit();
+
     // check for --startclean option and delete MP_ folders if present
     bool startClean = false;
     if (GetBoolArg("-startclean", false)) {
@@ -2614,11 +2647,13 @@ int mastercore_init()
             boost::filesystem::path tradePath = GetDataDir() / "MP_tradelist";
             boost::filesystem::path spPath = GetDataDir() / "MP_spinfo";
             boost::filesystem::path stoPath = GetDataDir() / "MP_stolist";
+            boost::filesystem::path updateDBPath = GetDataDir() / "OMNI_UpdateDB";
             if (boost::filesystem::exists(persistPath)) boost::filesystem::remove_all(persistPath);
             if (boost::filesystem::exists(txlistPath)) boost::filesystem::remove_all(txlistPath);
             if (boost::filesystem::exists(tradePath)) boost::filesystem::remove_all(tradePath);
             if (boost::filesystem::exists(spPath)) boost::filesystem::remove_all(spPath);
             if (boost::filesystem::exists(stoPath)) boost::filesystem::remove_all(stoPath);
+            if (boost::filesystem::exists(updateDBPath)) boost::filesystem::remove_all(updateDBPath);
             PrintToLog("Success clearing persistence files in datadir %s\n", GetDataDir().string());
             startClean = true;
         } catch (const boost::filesystem::filesystem_error& e) {
@@ -2631,6 +2666,7 @@ int mastercore_init()
     s_stolistdb = new CMPSTOList(GetDataDir() / "MP_stolist", fReindex);
     p_txlistdb = new CMPTxList(GetDataDir() / "MP_txlist", fReindex);
     _my_sps = new CMPSPInfo(GetDataDir() / "MP_spinfo", fReindex);
+    _updateDB = new COmniUpdateDB(GetDataDir() / "OMNI_UpdateDB", fReindex);
 
     MPPersistencePath = GetDataDir() / "MP_persist";
     TryCreateDirectory(MPPersistencePath);
@@ -2639,7 +2675,12 @@ int mastercore_init()
 
     ++mastercoreInitialized;
 
+    // loading from disk triggers update_tally_map outside of state changes, bypass temporarily
+    // TODO: rethink if this is the best way to handle this
+    bypassUpdateDB = true;
     nWaterlineBlock = load_most_relevant_state();
+    bypassUpdateDB = false;
+
     bool noPreviousState = (nWaterlineBlock <= 0);
 
     if (startClean) {
@@ -2687,6 +2728,9 @@ int mastercore_init()
     // load all alerts from levelDB (and immediately expire old ones)
     p_txlistdb->LoadAlerts(nWaterlineBlock);
 
+    // load the latest USN from levelDB
+    usn = _updateDB->LoadUSN();
+
     // initial scan
     msc_initial_scan(nWaterlineBlock);
 
@@ -2728,6 +2772,10 @@ int mastercore_shutdown()
         delete _my_sps;
         _my_sps = NULL;
     }
+    if (_updateDB) {
+        delete _updateDB;
+        _updateDB = NULL;
+    }
 
     PrintToLog("\nOmni Core shutdown completed\n");
     PrintToLog("Shutdown time: %s\n", DateTimeStrFormat("%Y-%m-%d %H:%M:%S", GetTime()));
@@ -2749,6 +2797,12 @@ bool mastercore_handler_tx(const CTransaction& tx, int nBlock, unsigned int idx,
     if (!mastercoreInitialized) {
         mastercore_init();
     }
+
+    // Set trigger for changes, cache the previous update trigger
+    int cachedTrigger = currentTrigger;
+    std::string cachedTriggerObject = currentTriggerObject;
+    currentTrigger = UPDATE_TRIGGER_TRANSACTION;
+    currentTriggerObject = tx.GetHash().GetHex();
 
     // clear pending, if any
     // NOTE1: Every incoming TX is checked, not just MP-ones because:
@@ -2797,9 +2851,16 @@ bool mastercore_handler_tx(const CTransaction& tx, int nBlock, unsigned int idx,
         if (interp_ret != PKT_ERROR - 2) {
             bool bValid = (0 <= interp_ret);
             p_txlistdb->recordTX(tx.GetHash(), bValid, nBlock, mp_obj.getType(), mp_obj.getNewAmount());
+
+            // notify API of new transaction
+            APIPost(APICreateTransactionNotification(tx.GetHash()));
         }
         fFoundTx |= (interp_ret == 0);
     }
+
+    // Restore cached trigger
+    currentTrigger = cachedTrigger;
+    currentTriggerObject = cachedTriggerObject;
 
     return fFoundTx;
 }
@@ -3464,6 +3525,148 @@ unsigned int n_found = 0;
   return (n_found);
 }
 
+// COmniUpdateDB
+uint64_t COmniUpdateDB::LoadUSN()
+{
+  uint64_t count = 0;
+  uint64_t highestUSN = 0;
+  Slice skey, svalue;
+  Iterator* it = NewIterator();
+
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      ++count;
+      uint64_t latestUSN = boost::lexical_cast<uint64_t>(it->key().ToString());
+      if (latestUSN > highestUSN) {
+          highestUSN=latestUSN;
+      }
+  }
+
+  delete it;
+
+  // we should expect that count is equal to the most recent USN otherwise we've got a problem with trusting the USN delta
+  assert (highestUSN == count);
+
+  return highestUSN;
+}
+
+bool COmniUpdateDB::exists(uint64_t usn)
+{
+  if (!pdb) return false;
+
+  std::string strValue;
+  Status status = pdb->Get(readoptions, boost::lexical_cast<std::string>(usn), &strValue);
+
+  if (!status.ok()) {
+      if (status.IsNotFound()) return false;
+  }
+
+  return true;
+}
+
+void COmniUpdateDB::recordUpdate(uint64_t usn, const std::string& data)
+{
+  if (!pdb) return;
+  Status status = pdb->Put(writeoptions, boost::lexical_cast<std::string>(usn), data);
+  ++nWritten;
+  if (msc_debug_updatedb) PrintToLog("%s(): %d=%s, %s\n", __FUNCTION__, usn, data, status.ToString());
+}
+
+void COmniUpdateDB::printAll()
+{
+  int count = 0;
+  Slice skey, svalue;
+  Iterator* it = NewIterator();
+
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      ++count;
+      PrintToConsole("Record #%d = %s:%s\n", count, it->key().ToString(), it->value().ToString());
+  }
+
+  delete it;
+}
+
+void COmniUpdateDB::printStats()
+{
+  PrintToLog("COmniUpdateDB stats: tWritten= %d , tRead= %d\n", nWritten, nRead);
+}
+
+void COmniUpdateDB::getUpdates(uint64_t startUSN, uint64_t endUSN, json_spirit::Array *updateArray)
+{
+  if (!pdb) return;
+
+  Slice skey, svalue;
+  Iterator* it = NewIterator();
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      uint64_t currentUSN = boost::lexical_cast<uint64_t>(it->key().ToString());
+      if (currentUSN >= startUSN && currentUSN <= endUSN) {
+          json_spirit::Value updateVal;
+          json_spirit::read_string(it->value().ToString(), updateVal);
+          updateArray->push_back(updateVal);
+      }
+  }
+
+  delete it;
+  return;
+}
+
+void COmniUpdateDB::searchUpdates(const uint256& hash, json_spirit::Array *updateArray)
+{
+  if (!pdb) return;
+
+  Slice skey, svalue;
+  Iterator* it = NewIterator();
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      std::string valueStr = it->value().ToString();
+      std::string searchStr = "\"updatetriggerobject\":\"" + hash.GetHex() + "\"";
+      size_t match = valueStr.find(searchStr);
+      if (match != std::string::npos) {
+          json_spirit::Value updateVal;
+          json_spirit::read_string(it->value().ToString(), updateVal);
+          updateArray->push_back(updateVal);
+      }
+  }
+
+  delete it;
+  return;
+}
+
+/*
+ * This function removes updates in _updateDB when a block is disconnected
+ *
+ * Returns the number of records changed.
+ */
+int COmniUpdateDB::rollbackBlock(const uint256& blockHash)
+{
+  unsigned int n_found = 0;
+  unsigned int n_total = 0;
+  uint64_t currentUSN = 0;
+  uint64_t highestUSN = 0;
+  leveldb::Iterator* it = NewIterator();
+  for (it->SeekToFirst(); it->Valid(); it->Next()) {
+      std::string valueStr = it->value().ToString();
+      size_t match = valueStr.find(blockHash.GetHex());
+      currentUSN = boost::lexical_cast<uint64_t>(it->key().ToString());
+      if (match != std::string::npos) {
+          // found an update in the disconnected block, remove it
+          // TODO: remove object
+      } else {
+          if (currentUSN > highestUSN) {
+              highestUSN = currentUSN;
+          }
+      }
+  }
+
+  // quickly audit _updateDB to ensure USN is as expected - if not there has been a failure and USN delta data can no longer be trusted
+  // we should expect that the new total number of records is equal to the most recent USN
+  assert ((n_total-n_found) == highestUSN);
+
+  PrintToLog("%s(%d); OmniUpdateDB rollbackBlock updated records= %d\n", __FUNCTION__, blockHash.GetHex(), n_found);
+
+  delete it;
+
+  return (n_found);
+}
+
 // MPSTOList here
 std::string CMPSTOList::getMySTOReceipts(string filterAddress)
 {
@@ -4063,7 +4266,11 @@ int mastercore_handler_block_begin(int nBlockPrev, CBlockIndex const * pBlockInd
 
         nWaterlineBlock = ConsensusParams().GENESIS_BLOCK - 1;
 
-        int best_state_block = load_most_relevant_state();
+        bypassUpdateDB = true;
+        int best_state_block = 
+load_most_relevant_state();
+        bypassUpdateDB = false;
+
         if (best_state_block < 0) {
             // unable to recover easily, remove stale stale state bits and reparse from the beginning.
             clear_all_state();
@@ -4081,6 +4288,10 @@ int mastercore_handler_block_begin(int nBlockPrev, CBlockIndex const * pBlockInd
             msc_initial_scan(nWaterlineBlock + 1);
         }
     }
+
+    // Set trigger for changes
+    currentTrigger = UPDATE_TRIGGER_BLOCK;
+    currentTriggerObject = pBlockIndex->GetBlockHash().GetHex();
 
     // handle any features that go live with this block
     CheckLiveActivations(pBlockIndex->nHeight);
@@ -4148,6 +4359,10 @@ int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex,
             mastercore_save_state(pBlockIndex);
         }
     }
+
+    // Clear trigger for changes
+    currentTrigger = UPDATE_TRIGGER_UNKNOWN;
+    currentTriggerObject = "";
 
     return 0;
 }

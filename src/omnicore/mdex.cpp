@@ -1,5 +1,6 @@
 #include "omnicore/mdex.h"
 
+#include "omnicore/apiconnector.h"
 #include "omnicore/errors.h"
 #include "omnicore/log.h"
 #include "omnicore/omnicore.h"
@@ -289,6 +290,12 @@ static MatchReturnType x_Trade(CMPMetaDEx* const pnew)
             t_tradelistdb->recordMatchedTrade(pold->getHash(), pnew->getHash(), // < might just pass pold, pnew
                 pold->getAddr(), pnew->getAddr(), pold->getDesProperty(), pnew->getDesProperty(), seller_amountGot, buyer_amountGot, pnew->getBlock());
 
+            // notify API of matched MetaDEx trade
+            APIPost(APICreateMetaDExTradeNotification(*pnew, *pold, buyer_amountGot, seller_amountGot));
+
+            // notify API of MetaDEx offer deletion
+            APIPost(APICreateMetaDExDeletionNotification(pold->getHash()));
+
             if (msc_debug_metadex1) PrintToLog("++ erased old: %s\n", offerIt->ToString());
             // erase the old seller element
             pofferSet->erase(offerIt++);
@@ -297,6 +304,8 @@ static MatchReturnType x_Trade(CMPMetaDEx* const pnew)
             if (0 < seller_replacement.getAmountRemaining()) {
                 PrintToLog("++ inserting seller_replacement: %s\n", seller_replacement.ToString());
                 pofferSet->insert(seller_replacement);
+                // notify API of new MetaDEx offer
+                APIPost(APICreateMetaDExOfferNotification(seller_replacement));
             }
 
             if (bBuyerSatisfied) {
@@ -487,6 +496,9 @@ int mastercore::MetaDEx_ADD(const std::string& sender_addr, uint32_t prop, int64
             PrintToLog("%s() ERROR: ALREADY EXISTS, line %d, file: %s\n", __FUNCTION__, __LINE__, __FILE__);
             return METADEX_ERROR -70;
         } else {
+            // notify API of new MetaDEx offer
+            APIPost(APICreateMetaDExOfferNotification(new_mdex));
+
             // move tokens into reserve
             assert(update_tally_map(sender_addr, prop, -new_mdex.getAmountRemaining(), BALANCE));
             assert(update_tally_map(sender_addr, prop, new_mdex.getAmountRemaining(), METADEX_RESERVE));
@@ -545,6 +557,9 @@ int mastercore::MetaDEx_CANCEL_AT_PRICE(const uint256& txid, unsigned int block,
             bool bValid = true;
             p_txlistdb->recordMetaDExCancelTX(txid, p_mdex->getHash(), bValid, block, p_mdex->getProperty(), p_mdex->getAmountRemaining());
 
+            // notify API of MetaDEx offer deletion
+            APIPost(APICreateMetaDExDeletionNotification(p_mdex->getHash()));
+
             indexes->erase(iitt++);
         }
     }
@@ -593,6 +608,9 @@ int mastercore::MetaDEx_CANCEL_ALL_FOR_PAIR(const uint256& txid, unsigned int bl
             // record the cancellation
             bool bValid = true;
             p_txlistdb->recordMetaDExCancelTX(txid, p_mdex->getHash(), bValid, block, p_mdex->getProperty(), p_mdex->getAmountRemaining());
+
+            // notify API of MetaDEx offer deletion
+            APIPost(APICreateMetaDExDeletionNotification(p_mdex->getHash()));
 
             indexes->erase(iitt++);
         }
@@ -650,6 +668,9 @@ int mastercore::MetaDEx_CANCEL_EVERYTHING(const uint256& txid, unsigned int bloc
                 // record the cancellation
                 bool bValid = true;
                 p_txlistdb->recordMetaDExCancelTX(txid, it->getHash(), bValid, block, it->getProperty(), it->getAmountRemaining());
+
+                // notify API of MetaDEx offer deletion
+                APIPost(APICreateMetaDExDeletionNotification(it->getHash()));
 
                 indexes.erase(it++);
             }

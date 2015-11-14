@@ -43,6 +43,7 @@ bool msc_debug_sp                 = 1;
 bool msc_debug_sto                = 1;
 bool msc_debug_txdb               = 0;
 bool msc_debug_tradedb            = 1;
+bool msc_debug_updatedb           = 0;
 bool msc_debug_persistence        = 0;
 bool msc_debug_ui                 = 0;
 bool msc_debug_pending            = 1;
@@ -260,6 +261,7 @@ void InitDebugLogLevels()
         if (*it == "consensus_hash") msc_debug_consensus_hash = true;
         if (*it == "consensus_hash_every_block") msc_debug_consensus_hash_every_block = true;
         if (*it == "alerts") msc_debug_alerts = true;
+        if (*it == "updatedb") msc_debug_updatedb = true;
         if (*it == "none" || *it == "all") {
             bool allDebugState = false;
             if (*it == "all") allDebugState = true;
@@ -294,6 +296,7 @@ void InitDebugLogLevels()
             msc_debug_consensus_hash = allDebugState;
             msc_debug_consensus_hash_every_block = allDebugState;
             msc_debug_alerts = allDebugState;
+            msc_debug_updatedb = allDebugState;
         }
     }
 }

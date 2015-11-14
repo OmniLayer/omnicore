@@ -2,6 +2,7 @@
 
 #include "omnicore/sp.h"
 
+#include "omnicore/apiconnector.h"
 #include "omnicore/log.h"
 #include "omnicore/omnicore.h"
 #include "omnicore/uint256_extensions.h"
@@ -163,6 +164,10 @@ bool CMPSPInfo::updateSP(uint32_t propertyId, const Entry& info)
     }
 
     PrintToLog("%s(): updated entry for SP %d successfully\n", __func__, propertyId);
+
+    // notify API of property change
+    APIPost(APICreatePropertyNotification(propertyId));
+
     return true;
 }
 
@@ -222,6 +227,9 @@ uint32_t CMPSPInfo::putSP(uint8_t ecosystem, const Entry& info)
     if (!status.ok()) {
         PrintToLog("%s(): ERROR for SP %d: %s\n", __func__, propertyId, status.ToString());
     }
+
+    // notify API of property change
+    APIPost(APICreatePropertyNotification(propertyId));
 
     return propertyId;
 }

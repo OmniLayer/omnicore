@@ -38,6 +38,7 @@ extern bool msc_debug_sp;
 extern bool msc_debug_sto;
 extern bool msc_debug_txdb;
 extern bool msc_debug_tradedb;
+extern bool msc_debug_updatedb;
 extern bool msc_debug_persistence;
 extern bool msc_debug_ui;
 extern bool msc_debug_pending;
