@@ -145,6 +145,46 @@ bool BalanceToJSON(const std::string& address, uint32_t property, Object& balanc
     }
 }
 
+// explicity requests removal of a transaction from the mempool - useful when a (non-wallet) transaction has been broadcast
+// via the node and is unlikely to confirm (due to low fees etc) thus allowing it to be replaced (note nothing to do with RBF)
+// Note: unsuitable for wallet transactions, these cannot just be removed from mempool and must be removed from wallet too (see zapwallettxs)
+Value omni_discardmempooltransaction(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "omni_discardmempooltransaction \"txid\"\n"
+            "\nDiscards a (non-wallet) transaction from the mempool.\n"
+            "\nArguments:\n"
+            "1. txid                 (string, required) the hash of the transaction to drop from the mempool\n"
+            "\nResult:\n"
+            "[                       (array of string)\n"
+            "  \"txid\",             (string) the hash of the transaction removed from the mempool\n"
+            "  ...\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_discardmempooltransaction", "\"1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"")
+            + HelpExampleRpc("omni_discardmempooltransaction", "\"1075db55d416d3ca199f55b6084e2115b9345e16c5cf302fc80e9d5fbf5d48d\"")
+        );
+
+    uint256 txid = ParseHashV(params[0], "txid");
+
+    CTransaction tx;
+    uint256 blockHash;
+    if (!GetTransaction(txid, tx, blockHash, true)) {
+        PopulateFailure(MP_TX_NOT_FOUND);
+    }
+
+    bool deleteChildren = false;
+    std::list<CTransaction> removedList; // should only ever contain one but if we start deleting childen too (recurse) it could be >1 affected tx
+    mempool.remove(tx, removedList, deleteChildren);
+
+    Array result;
+    BOOST_FOREACH(const CTransaction &tx, removedList) {
+        result.push_back(tx.GetHash().GetHex());
+    }
+
+    return result;
+}
+
 // generate a list of seed blocks based on the data in LevelDB
 Value omni_getseedblocks(const Array& params, bool fHelp)
 {

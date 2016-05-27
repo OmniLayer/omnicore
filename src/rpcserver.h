@@ -255,6 +255,9 @@ extern json_spirit::Value omni_getmetadexhash(const json_spirit::Array& params, 
 /* Omni Core configuration calls */
 extern json_spirit::Value omni_setautocommit(const json_spirit::Array& params, bool fHelp);
 
+/* Omni Core miscellaneous calls */
+extern json_spirit::Value omni_discardmempooltransaction(const json_spirit::Array& params, bool fHelp);
+
 /* Omni Core transaction calls */
 extern json_spirit::Value omni_sendrawtx(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value omni_send(const json_spirit::Array& params, bool fHelp);

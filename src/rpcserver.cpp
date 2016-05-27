@@ -387,6 +387,10 @@ static const CRPCCommand vRPCCommands[] =
     /* CATEGORY                              NAME                               ACTOR (FUNCTION)                  OKSAFEMODE  THREADSAFE  REQWALLET */
     { "omni layer (configuration)",          "omni_setautocommit",              &omni_setautocommit,              true,       true,       true },
 
+    /* Omni Core miscellaneous calls */
+    /* CATEGORY                              NAME                               ACTOR (FUNCTION)                  OKSAFEMODE  THREADSAFE  REQWALLET */
+    { "omni layer (misc)",                   "omni_discardmempooltransaction",  &omni_discardmempooltransaction,  true,       true,       false },
+
     /* Omni Core transaction calls */
     /* CATEGORY                              NAME                               ACTOR (FUNCTION)                  OKSAFEMODE  THREADSAFE  REQWALLET */
     { "omni layer (transaction creation)",   "omni_sendrawtx",                  &omni_sendrawtx,                  false,      true,       true },
