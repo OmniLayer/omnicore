@@ -51,16 +51,17 @@ Value omni_setaltfeesource(const Array& params, bool fHelp)
             "\"true\"                  (bool)\n"
 
             "\nExamples:\n"
-            + HelpExampleCli("omni_setaltfeesource", "true \"1BitcoinAddress\"")
-            + HelpExampleRpc("omni_setaltfeesource", "true \"1BitcoinAddress\"")
+            + HelpExampleCli("omni_setaltfeesource", "true, \"1BitcoinAddress\"")
+            + HelpExampleRpc("omni_setaltfeesource", "true, \"1BitcoinAddress\"")
         );
 
 
     bool fEnable = params[0].get_bool();
     if (fEnable)
     {
-        // ParseAddress will throw an error if the address is invalid
         string sAddress = (params.size() > 1) ? ParseAddress(params[1]) : "";
+        if (sAddress == "")
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
         sFundingAddress = sAddress;
     }
     else

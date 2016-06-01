@@ -109,6 +109,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "trade_MP", 3 }, // depreciated
     { "trade_MP", 5 }, // depreciated
 
+    /* Omni Core - configuration calls */
+    { "omni_setaltfeesource", 0 },
+
     /* Omni Core - data retrieval calls */
     { "omni_gettradehistoryforaddress", 1 },
     { "omni_gettradehistoryforaddress", 2 },
