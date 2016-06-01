@@ -16,6 +16,7 @@ public:
     CCoinControl()
     {
         SetNull();
+        is_omni = false;
     }
 
     void SetNull()
@@ -29,20 +30,34 @@ public:
         return (setSelected.size() > 0);
     }
 
+    COutPoint GetFirst() const
+    {
+        return *setSelected.begin();
+    }
+
     bool IsSelected(const uint256& hash, unsigned int n) const
     {
         COutPoint outpt(hash, n);
-        return (setSelected.count(outpt) > 0);
+        for (std::vector<COutPoint>::const_iterator x = setSelected.begin(); x != setSelected.end(); x++)
+            if (*x == outpt)
+                return true;
+        return false;
     }
 
     void Select(const COutPoint& output)
     {
-        setSelected.insert(output);
+        if (!IsSelected(output.hash, output.n))
+            setSelected.push_back(output);
     }
 
     void UnSelect(const COutPoint& output)
     {
-        setSelected.erase(output);
+        for (std::vector<COutPoint>::iterator x = setSelected.begin(); x != setSelected.end(); x++)
+            if (*x == output)
+            {
+                setSelected.erase(x);
+                break;
+            }
     }
 
     void UnSelectAll()
@@ -55,8 +70,19 @@ public:
         vOutpoints.assign(setSelected.begin(), setSelected.end());
     }
 
+    bool IsOmni() const
+    {
+        return is_omni;
+    }
+
+    void SetOmni(bool omni = true)
+    {
+        is_omni = omni;;
+    }
+
 private:
-    std::set<COutPoint> setSelected;
+    std::vector<COutPoint> setSelected;
+    bool is_omni;
 };
 
 #endif // BITCOIN_COINCONTROL_H

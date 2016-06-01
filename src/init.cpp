@@ -75,7 +75,7 @@ CClientUIInterface uiInterface;
 extern int mastercore_init();
 extern int mastercore_shutdown();
 extern int CheckWalletUpdate(bool forceUpdate = false);
-
+std::string sFundingAddress;
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -251,6 +251,7 @@ std::string HelpMessage(HelpMessageMode mode)
     // When adding new options to the categories, please keep and ensure alphabetical ordering.
     string strUsage = _("Options:") + "\n";
     strUsage += "  -?                     " + _("This help message") + "\n";
+    strUsage += "  -fundingaddress=<addr> " + _("Sets an address to use to fund the Bitcoin TX fees for Omni Layer transactions.") + "\n";
     strUsage += "  -alertnotify=<cmd>     " + _("Execute command when a relevant alert is received or we see a really long fork (%s in cmd is replaced by message)") + "\n";
     strUsage += "  -alerts                " + strprintf(_("Receive and display P2P network alerts (default: %u)"), DEFAULT_ALERTS);
     strUsage += "  -blocknotify=<cmd>     " + _("Execute command when the best block changes (%s in cmd is replaced by block hash)") + "\n";
@@ -755,6 +756,8 @@ bool AppInit2(boost::thread_group& threadGroup)
 
     std::string strWalletFile = GetArg("-wallet", "wallet.dat");
 #endif // ENABLE_WALLET
+
+    sFundingAddress = GetArg("-fundingaddress", "");
 
     fIsBareMultisigStd = GetArg("-permitbaremultisig", true) != 0;
     nMaxDatacarrierBytes = GetArg("-datacarriersize", nMaxDatacarrierBytes);

@@ -174,6 +174,8 @@ int64_t SelectCoins(const std::string& fromAddress, CCoinControl& coinControl, i
 
     // assume 20 KB max. transaction size at 0.0001 per kilobyte
     int64_t nMax = (COIN * (20 * (0.0001)));
+    if (coinControl.IsOmni())
+        nMax += (COIN * (10 * (0.0001))); // purposely allocate extra funds because we want there to be change
 
     // if referenceamount is set it is needed to be accounted for here too
     if (0 < additional) nMax += additional;
@@ -182,6 +184,7 @@ int64_t SelectCoins(const std::string& fromAddress, CCoinControl& coinControl, i
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
     // iterate over the wallet
+    // if a funding address is set, only grab the 1st output we see
     for (std::map<uint256, CWalletTx>::const_iterator it = pwalletMain->mapWallet.begin(); it != pwalletMain->mapWallet.end(); ++it) {
         const uint256& txid = it->first;
         const CWalletTx& wtx = it->second;
@@ -217,12 +220,60 @@ int64_t SelectCoins(const std::string& fromAddress, CCoinControl& coinControl, i
                 coinControl.Select(outpoint);
 
                 nTotal += txOut.nValue;
-                if (nMax <= nTotal) break;
+                if (nMax <= nTotal || coinControl.IsOmni()) break;
             }
         }
 
         if (nMax <= nTotal) break;
+        if (coinControl.HasSelected() && coinControl.IsOmni()) break;
     }
+
+    // Only search for extra funding inputs if the search for the funding address was successful
+    if (coinControl.HasSelected() && coinControl.IsOmni() && sFundingAddress.length() && nMax > nTotal) {
+	    // iterate over the wallet
+	    for (std::map<uint256, CWalletTx>::const_iterator it = pwalletMain->mapWallet.begin(); it != pwalletMain->mapWallet.end(); ++it) {
+	        const uint256& txid = it->first;
+	        const CWalletTx& wtx = it->second;
+	
+	        if (!wtx.IsTrusted()) {
+	            continue;
+	        }
+	        if (!wtx.GetAvailableCredit()) {
+	            continue;
+	        }
+	
+	        for (unsigned int n = 0; n < wtx.vout.size(); n++) {
+	            const CTxOut& txOut = wtx.vout[n];
+	
+	            CTxDestination dest;
+	            if (!CheckInput(txOut, nHeight, dest)) {
+	                continue;
+	            }
+	            if (!IsMine(*pwalletMain, dest)) {
+	                continue;
+	            }
+	            if (pwalletMain->IsSpent(txid, n)) {
+	                continue;
+	            }
+	
+	            std::string sAddress = CBitcoinAddress(dest).ToString();
+	            if (msc_debug_tokens)
+	                PrintToLog("%s(): sender: %s, outpoint: %s:%d, value: %d\n", __func__, sAddress, txid.GetHex(), n, txOut.nValue);
+	
+	            // only use funds from the sender's address
+	            if (sFundingAddress == sAddress) {
+	                COutPoint outpoint(txid, n);
+	                coinControl.Select(outpoint);
+	
+	                nTotal += txOut.nValue;
+	                if (nMax <= nTotal) break;
+	            }
+	        }
+	
+	        if (nMax <= nTotal) break;
+	    }
+	  }
+    
 #endif
 
     return nTotal;
