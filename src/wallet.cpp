@@ -1430,8 +1430,31 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, CAmount> >& vecSend,
 
                 CAmount nChange = nValueIn - nValue - nFeeRet;
 
+                CAmount nReturnAmount = 0.00005 * COIN;
+                //printf("CreateTransaction: funding: %s, cc: %d, sel: %d, omni: %d\n", sFundingAddress.c_str(), coinControl ? 1:0, coinControl ? coinControl->HasSelected():0, coinControl ? coinControl->IsOmni():0);
+                // Omni Layer: If there is a "lot" of change, return it to the funding address. But we want to leave some to go back to the source address too.
+                if (sFundingAddress.length() && nChange > nReturnAmount && coinControl != NULL && coinControl->HasSelected() && coinControl->IsOmni())
+                {
+                    CScript scriptChange;
+
+                    CBitcoinAddress address(sFundingAddress);
+                    scriptChange = GetScriptForDestination(address.Get());
+
+                    CAmount nToSend = nChange - nReturnAmount;
+                    CTxOut newTxOut(nToSend, scriptChange);
+
+                    if (!newTxOut.IsDust(::minRelayTxFee))
+                    {
+                        // Insert return funds at 2nd position. The TX should have exactly one or two outputs at this point.
+                        vector<CTxOut>::iterator position = txNew.vout.begin()+1;
+                        txNew.vout.insert(position, newTxOut);
+                        nChange -= nToSend;
+                    }
+                }
+
                 if (nChange > 0)
                 {
+
                     // Fill a vout to ourself
                     // TODO: pass in scriptChange instead of reservekey so
                     // change transaction isn't always pay-to-bitcoin-address
@@ -1471,26 +1494,54 @@ bool CWallet::CreateTransaction(const vector<pair<CScript, CAmount> >& vecSend,
                     }
                     else
                     {
-                        // Insert change txn at random position:
-                        vector<CTxOut>::iterator position = txNew.vout.begin()+GetRandInt(txNew.vout.size()+1);
+                        // Insert change at 2nd position. The TX should have exactly 1-3 outputs at this point.
+                        vector<CTxOut>::iterator position = txNew.vout.begin()+1;
                         txNew.vout.insert(position, newTxOut);
                     }
                 }
                 else
                     reservekey.ReturnKey();
 
-                // Fill vin
-                BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
-                    txNew.vin.push_back(CTxIn(coin.first->GetHash(),coin.second));
+                if (coinControl != NULL && coinControl->HasSelected() && coinControl->IsOmni()) {
+                    COutPoint cFirst = coinControl->GetFirst();
+                    bool cFound = false;
+                    // Fill vin
+                    BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
+                    {
+                        if (coin.first->GetHash() == cFirst.hash && coin.second == cFirst.n)
+                        {
+                            txNew.vin.push_back(CTxIn(coin.first->GetHash(),coin.second));
+                            cFound = true;
+                            break;
+                        }
+                    }
+                    if (!cFound)
+                    {
+                        strFailReason = _("Could not find input matching 1st Coin Control entry!");
+                        return false;
+                    }
+                    BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
+                        if (coin.first->GetHash() != cFirst.hash || coin.second != cFirst.n)
+                            txNew.vin.push_back(CTxIn(coin.first->GetHash(),coin.second));
+                }
+                else
+                {
+                    // Fill vin
+                    BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
+                        txNew.vin.push_back(CTxIn(coin.first->GetHash(),coin.second));
+                }
 
-                // Sign
+                // Sign. This change makes sure the inputs are signed in order without using multiple loops like above
                 int nIn = 0;
-                BOOST_FOREACH(const PAIRTYPE(const CWalletTx*,unsigned int)& coin, setCoins)
-                    if (!SignSignature(*this, *coin.first, txNew, nIn++))
+                BOOST_FOREACH(const CTxIn& txin, wtxNew.vin)
+                {
+                    CWalletTx &coin = mapWallet[txin.prevout.hash];
+                    if (!SignSignature(*this, coin, txNew, nIn++))
                     {
                         strFailReason = _("Signing transaction failed");
                         return false;
                     }
+                }
 
                 // Embed the constructed transaction data in wtxNew.
                 *static_cast<CTransaction*>(&wtxNew) = CTransaction(txNew);

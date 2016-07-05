@@ -35,6 +35,42 @@ using namespace json_spirit;
 using namespace mastercore;
 
 // omni_send - simple send
+Value omni_setaltfeesource(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 2)
+        throw runtime_error(
+            "omni_setaltfeesource usealtfeesource \"address\"\n"
+
+            "\nSets a funding address to use for Omni Layer transactions. If enabled omnicored will attempt to keep as much Bitcoin in this address as possible while still providing for future Omni Layer transactions.\n"
+
+            "\nArguments:\n"
+            "1. usealtfeesource      (bool, required) whether to enable the alternate fee source\n"
+            "2. toaddress            (string, required) the address to use as the alternate fee source\n"
+
+            "\nResult:\n"
+            "\"true\"                  (bool)\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("omni_setaltfeesource", "true, \"1BitcoinAddress\"")
+            + HelpExampleRpc("omni_setaltfeesource", "true, \"1BitcoinAddress\"")
+        );
+
+
+    bool fEnable = params[0].get_bool();
+    if (fEnable)
+    {
+        string sAddress = (params.size() > 1) ? ParseAddress(params[1]) : "";
+        if (sAddress == "")
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+        sFundingAddress = sAddress;
+    }
+    else
+        sFundingAddress = "";
+
+    return true;
+}
+
+// omni_send - simple send
 Value omni_send(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 4 || params.size() > 6)

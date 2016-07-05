@@ -259,6 +259,7 @@ extern json_spirit::Value omni_getfeedistributions(const json_spirit::Array& par
 
 /* Omni Core configuration calls */
 extern json_spirit::Value omni_setautocommit(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value omni_setaltfeesource(const json_spirit::Array& params, bool fHelp);
 
 /* Omni Core transaction calls */
 extern json_spirit::Value omni_sendrawtx(const json_spirit::Array& params, bool fHelp);

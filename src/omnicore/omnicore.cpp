@@ -2347,8 +2347,14 @@ int mastercore::ClassAgnosticWalletTXBuilder(const std::string& senderAddress, c
     CBitcoinAddress addr = CBitcoinAddress(senderAddress);
     coinControl.destChange = addr.Get();
 
+    // as I understand it having extra input addresses is only supported by Class C payloads
+    if (omniTxClass == OMNI_CLASS_C && sFundingAddress.length()) {
+        coinControl.SetOmni();
+    }
+
+    // Potential TODO? If an input can't be found, create/commit a new transaction from the funding address to sending address and use it automatically
     // Select the inputs
-    if (0 > SelectCoins(senderAddress, coinControl, referenceAmount)) { return MP_INPUTS_INVALID; }
+    if (SelectCoins(senderAddress, coinControl, referenceAmount) <= 0) { return MP_INPUTS_INVALID; }
 
     // Encode the data outputs
     switch(omniTxClass) {
