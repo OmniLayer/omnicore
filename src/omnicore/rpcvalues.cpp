@@ -171,6 +171,15 @@ uint8_t ParseMetaDExAction(const json_spirit::Value& value)
     return static_cast<uint8_t>(action);
 }
 
+uint16_t ParseFeedReference(const json_spirit::Value& value)
+{
+    int64_t feedRef = value.get_int64();
+    if (feedRef < 0 || 65535 < feedRef) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Feed reference must be in the range of 0-65535");
+    }
+    return static_cast<uint16_t>(feedRef);
+}
+
 CTransaction ParseTransaction(const json_spirit::Value& value)
 {
     CTransaction tx;

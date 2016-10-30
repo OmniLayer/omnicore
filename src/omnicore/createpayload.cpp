@@ -444,6 +444,24 @@ std::vector<unsigned char> CreatePayload_OmniCoreAlert(uint16_t alertType, uint3
     return payload;
 }
 
+std::vector<unsigned char> CreatePayload_PublishFeed(uint16_t feedRef, uint64_t feedValue)
+{
+    std::vector<unsigned char> payload;
+    uint16_t messageType = 31;
+    uint16_t messageVer = 0;
+    mastercore::swapByteOrder16(messageVer);
+    mastercore::swapByteOrder16(messageType);
+    mastercore::swapByteOrder16(feedRef);
+    mastercore::swapByteOrder64(feedValue);
+
+    PUSH_BACK_BYTES(payload, messageVer);
+    PUSH_BACK_BYTES(payload, messageType);
+    PUSH_BACK_BYTES(payload, feedRef);
+    PUSH_BACK_BYTES(payload, feedValue);
+
+    return payload;
+}
+
 #undef PUSH_BACK_BYTES
 #undef PUSH_BACK_BYTES_PTR
 

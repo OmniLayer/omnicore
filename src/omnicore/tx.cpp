@@ -60,7 +60,7 @@ std::string mastercore::strTransactionType(uint16_t txType)
         case MSC_TYPE_GRANT_PROPERTY_TOKENS: return "Grant Property Tokens";
         case MSC_TYPE_REVOKE_PROPERTY_TOKENS: return "Revoke Property Tokens";
         case MSC_TYPE_CHANGE_ISSUER_ADDRESS: return "Change Issuer Address";
-        case MSC_TYPE_NOTIFICATION: return "Notification";
+        case MSC_TYPE_PUBLISH_FEED: return "Publish Feed";
         case OMNICORE_MESSAGE_TYPE_ALERT: return "ALERT";
         case OMNICORE_MESSAGE_TYPE_ACTIVATION: return "Feature Activation";
 
@@ -148,6 +148,9 @@ bool CMPTransaction::interpret_Transaction()
 
         case MSC_TYPE_CHANGE_ISSUER_ADDRESS:
             return interpret_ChangeIssuer();
+
+        case MSC_TYPE_PUBLISH_FEED:
+            return interpret_PublishFeed();
 
         case OMNICORE_MESSAGE_TYPE_ACTIVATION:
             return interpret_Activation();
@@ -400,6 +403,27 @@ bool CMPTransaction::interpret_MetaDExCancelEcosystem()
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t       ecosystem: %d\n", (int)ecosystem);
+    }
+
+    return true;
+}
+
+/** Tx 31 */
+bool CMPTransaction::interpret_PublishFeed()
+{
+    if (pkt_size < 14) {
+        return false;
+    }
+
+    memcpy(&feed_reference, &pkt[4], 2);
+    swapByteOrder16(feed_reference);
+    memcpy(&nValue, &pkt[6], 8);
+    swapByteOrder64(nValue);
+    nNewValue = nValue;
+
+    if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
+        PrintToLog("\t  feed reference: %d\n", feed_reference);
+        PrintToLog("\t      feed value: %s\n", FormatIndivisibleMP(nValue));
     }
 
     return true;
@@ -749,6 +773,9 @@ int CMPTransaction::interpretPacket()
 
         case MSC_TYPE_CHANGE_ISSUER_ADDRESS:
             return logicMath_ChangeIssuer();
+
+        case MSC_TYPE_PUBLISH_FEED:
+            return logicMath_PublishFeed();
 
         case OMNICORE_MESSAGE_TYPE_ACTIVATION:
             return logicMath_Activation();
@@ -1389,6 +1416,40 @@ int CMPTransaction::logicMath_MetaDExCancelEcosystem()
     int rc = MetaDEx_CANCEL_EVERYTHING(txid, block, sender, ecosystem);
 
     return rc;
+}
+
+/** Tx 31 */
+int CMPTransaction::logicMath_PublishFeed()
+{
+    uint256 blockHash;
+    {
+        LOCK(cs_main);
+
+        CBlockIndex* pindex = chainActive[block];
+        if (pindex == NULL) {
+            PrintToLog("%s(): ERROR: block %d not in the active chain\n", __func__, block);
+            return (PKT_ERROR_SP -20);
+        }
+        blockHash = pindex->GetBlockHash();
+    }
+
+    if (!IsTransactionTypeAllowed(block, 1, type, version)) { // Publish Feed transactions are ecosystem independent
+        PrintToLog("%s(): rejected: type %d or version %d not permitted for property %d at block %d\n",
+                __func__,
+                type,
+                version,
+                property,
+                block);
+        return (PKT_ERROR_SP -22);
+    }
+
+    if (MAX_INT_8_BYTES < nValue) { // Zero values are permitted
+        PrintToLog("%s(): rejected: value out of range: %d\n", __func__, nValue);
+        return (PKT_ERROR_SP -23);
+    }
+
+    p_feeddb->RecordFeedValue(sender, feed_reference, nValue, block, tx_idx, txid);
+    return 0;
 }
 
 /** Tx 50 */

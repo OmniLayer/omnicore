@@ -93,6 +93,9 @@ private:
     uint32_t activation_block;
     uint32_t min_client_version;
 
+    // Publish Feed
+    uint16_t feed_reference;
+
     // Indicates whether the transaction can be used to execute logic
     bool rpcOnly;
 
@@ -121,6 +124,7 @@ private:
     bool interpret_ChangeIssuer();
     bool interpret_Activation();
     bool interpret_Alert();
+    bool interpret_PublishFeed();
 
     /**
      * Logic and "effects"
@@ -143,6 +147,7 @@ private:
     int logicMath_ChangeIssuer();
     int logicMath_Activation();
     int logicMath_Alert();
+    int logicMath_PublishFeed();
 
     /**
      * Logic helpers
@@ -251,6 +256,7 @@ public:
         activation_block = 0;
         min_client_version = 0;
         distribution_property = 0;
+        feed_reference = 0;
     }
 
     /** Sets the given values. */

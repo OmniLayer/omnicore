@@ -137,6 +137,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "omni_getfeetrigger", 0 },
     { "omni_getfeedistribution", 0 },
     { "omni_getfeedistributions", 0 },
+    { "omni_getfeed", 1 },
+    { "omni_getfeed", 2 },
+    { "omni_getfeedhistory", 1 },
 
     /* Omni Core - transaction calls */
     { "omni_send", 2 },
@@ -177,6 +180,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "omni_sendactivation", 3 },
     { "omni_sendalert", 1 },
     { "omni_sendalert", 2 },
+    { "omni_sendpublishfeed", 1 },
 
     /* Omni Core - raw transaction calls */
     { "omni_decodetransaction", 1 },

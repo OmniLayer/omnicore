@@ -138,6 +138,7 @@ CMPSTOList *mastercore::s_stolistdb;
 COmniTransactionDB *mastercore::p_OmniTXDB;
 COmniFeeCache *mastercore::p_feecache;
 COmniFeeHistory *mastercore::p_feehistory;
+COmniFeedDB *mastercore::p_feeddb;
 
 // indicate whether persistence is enabled at this point, or not
 // used to write/read files, for breakout mode, debugging, etc.
@@ -2049,6 +2050,7 @@ void clear_all_state()
     p_OmniTXDB->Clear();
     p_feecache->Clear();
     p_feehistory->Clear();
+    p_feeddb->Clear();
     assert(p_txlistdb->setDBVersion() == DB_VERSION); // new set of databases, set DB version
     exodus_prev = 0;
 }
@@ -2100,6 +2102,7 @@ int mastercore_init()
             boost::filesystem::path omniTXDBPath = GetDataDir() / "Omni_TXDB";
             boost::filesystem::path feesPath = GetDataDir() / "OMNI_feecache";
             boost::filesystem::path feeHistoryPath = GetDataDir() / "OMNI_feehistory";
+            boost::filesystem::path feedDBPath = GetDataDir() / "OMNI_feedDB";
             if (boost::filesystem::exists(persistPath)) boost::filesystem::remove_all(persistPath);
             if (boost::filesystem::exists(txlistPath)) boost::filesystem::remove_all(txlistPath);
             if (boost::filesystem::exists(tradePath)) boost::filesystem::remove_all(tradePath);
@@ -2108,6 +2111,7 @@ int mastercore_init()
             if (boost::filesystem::exists(omniTXDBPath)) boost::filesystem::remove_all(omniTXDBPath);
             if (boost::filesystem::exists(feesPath)) boost::filesystem::remove_all(feesPath);
             if (boost::filesystem::exists(feeHistoryPath)) boost::filesystem::remove_all(feeHistoryPath);
+            if (boost::filesystem::exists(feedDBPath)) boost::filesystem::remove_all(feedDBPath);
             PrintToLog("Success clearing persistence files in datadir %s\n", GetDataDir().string());
             startClean = true;
         } catch (const boost::filesystem::filesystem_error& e) {
@@ -2123,6 +2127,7 @@ int mastercore_init()
     p_OmniTXDB = new COmniTransactionDB(GetDataDir() / "Omni_TXDB", fReindex);
     p_feecache = new COmniFeeCache(GetDataDir() / "OMNI_feecache", fReindex);
     p_feehistory = new COmniFeeHistory(GetDataDir() / "OMNI_feehistory", fReindex);
+    p_feeddb = new COmniFeedDB(GetDataDir() / "OMNI_feedDB", fReindex);
 
     MPPersistencePath = GetDataDir() / "MP_persist";
     TryCreateDirectory(MPPersistencePath);
@@ -2231,6 +2236,10 @@ int mastercore_shutdown()
     if (p_feehistory) {
         delete p_feehistory;
         p_feehistory = NULL;
+    }
+    if (p_feeddb) {
+        delete p_feeddb;
+        p_feeddb = NULL;
     }
 
     PrintToLog("\nOmni Core shutdown completed\n");
@@ -2422,6 +2431,134 @@ int mastercore::WalletTxBuilder(const std::string& senderAddress, const std::str
     return MP_ERR_WALLET_ACCESS;
 #endif
 
+}
+
+std::set<std::pair<int,int64_t> > COmniFeedDB::GetFeedHistory(const std::string& address, uint16_t feedRef)
+{
+    std::set<std::pair<int,int64_t> > feedHistory;
+
+    if (!pdb) return feedHistory;
+
+    Iterator* it = NewIterator();
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        std::string keyStr = it->key().ToString();
+        if (keyStr.find(address) != std::string::npos) {
+            std::vector<std::string> vstr;
+            boost::split(vstr, keyStr, boost::is_any_of(":"), token_compress_on);
+            uint16_t entryRef = boost::lexical_cast<uint16_t>(vstr[1]);
+            if (entryRef == feedRef) {
+                int entryBlock = boost::lexical_cast<int>(vstr[2]);
+                std::vector<std::string> entryvstr;
+                std::string valueStr = it->value().ToString();
+                boost::split(entryvstr, valueStr, boost::is_any_of(":"), token_compress_on);
+                feedHistory.insert(std::make_pair(entryBlock, boost::lexical_cast<int64_t>(entryvstr[0])));
+            }
+        }
+    }
+
+    delete it;
+    return feedHistory;
+}
+
+std::set<uint16_t> COmniFeedDB::GetAddressFeeds(const std::string& address)
+{
+    std::set<uint16_t> feedRefs;
+
+    if (!pdb) return feedRefs;
+
+    Iterator* it = NewIterator();
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        std::string keyStr = it->key().ToString();
+        if (keyStr.find(address) != std::string::npos) {
+            std::vector<std::string> vstr;
+            boost::split(vstr, keyStr, boost::is_any_of(":"), token_compress_on);
+            feedRefs.insert(boost::lexical_cast<uint16_t>(vstr[1]));
+        }
+    }
+
+    delete it;
+    return feedRefs;
+}
+
+bool COmniFeedDB::GetFeedValue(const std::string& address, uint16_t feedRef, int64_t *feedValue, int *feedBlock, uint256 *feedTXID, int maxBlock)
+{
+    if (!pdb) return 0;
+
+    int mostRecentBlock = 0;
+    bool found = false;
+
+    // TODO - faster way to do this? (eg move iterator to first instance of address for example)
+    Iterator* it = NewIterator();
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        std::string keyStr = it->key().ToString();
+        if (keyStr.find(address) != std::string::npos) {
+            std::vector<std::string> vstr;
+            boost::split(vstr, keyStr, boost::is_any_of(":"), token_compress_on);
+            uint16_t entryRef = boost::lexical_cast<uint16_t>(vstr[1]);
+            if (entryRef == feedRef) {
+                int entryBlock = boost::lexical_cast<int>(vstr[2]);
+                if (entryBlock < mostRecentBlock || entryBlock > maxBlock) continue;
+                std::vector<std::string> entryvstr;
+                std::string valueStr = it->value().ToString();
+                boost::split(entryvstr, valueStr, boost::is_any_of(":"), token_compress_on);
+                *feedValue = boost::lexical_cast<int64_t>(entryvstr[0]);
+                *feedBlock = entryBlock;
+                *feedTXID = uint256(entryvstr[1]);
+                found = true;
+            }
+        }
+    }
+
+    delete it;
+    return found;
+}
+
+void COmniFeedDB::RecordFeedValue(const std::string& address, uint16_t feedRef, int64_t feedValue, int block, int index, const uint256& txid)
+{
+    assert(pdb);
+
+    const std::string key = strprintf("%s:%d:%d:%d", address, feedRef, block, index);
+    const std::string value = strprintf("%d:%s", feedValue, txid.GetHex());
+
+    Status status = pdb->Put(writeoptions, key, value);
+    ++nWritten;
+}
+
+void COmniFeedDB::PrintAll()
+{
+    PrintToLog("Omni Feed DB:\n");
+    Iterator* it = NewIterator();
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        PrintToLog("  %s = %s\n", it->key().ToString(), it->value().ToString());
+    }
+
+    delete it;
+}
+
+int COmniFeedDB::DeleteAboveBlock(int blockNum)
+{
+    PrintToLog("COmniFeedDB::DeleteAboveBlock called, rolling back to block %d\n", blockNum);
+    assert(pdb);
+
+    unsigned int nDeleted = 0;
+    leveldb::Iterator* it = NewIterator();
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        leveldb::Slice sKey = it->key();
+        std::string sKeyStr = sKey.ToString();
+        std::vector<std::string> vStr;
+        boost::split(vStr, sKeyStr, boost::is_any_of(":"), token_compress_on);
+        int entryBlock = boost::lexical_cast<int>(vStr[2]);
+        if (entryBlock >= blockNum) {
+           PrintToLog("\tDeleting record: %s=%s\n", sKeyStr, it->value().ToString());
+           pdb->Delete(writeoptions, sKey);
+           nDeleted++;
+        }
+    }
+    PrintToLog("COmniFeedDB::DeleteAboveBlock finished, deleted %d records\n", nDeleted);
+
+    delete it;
+
+    return (nDeleted);
 }
 
 void COmniTransactionDB::RecordTransaction(const uint256& txid, uint32_t posInBlock)
@@ -3650,6 +3787,7 @@ int mastercore_handler_block_begin(int nBlockPrev, CBlockIndex const * pBlockInd
         s_stolistdb->deleteAboveBlock(pBlockIndex->nHeight);
         p_feecache->RollBackCache(pBlockIndex->nHeight);
         p_feehistory->RollBackHistory(pBlockIndex->nHeight);
+        p_feeddb->DeleteAboveBlock(pBlockIndex->nHeight);
         reorgRecoveryMaxHeight = 0;
 
         nWaterlineBlock = ConsensusParams().GENESIS_BLOCK - 1;

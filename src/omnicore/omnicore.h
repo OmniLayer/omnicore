@@ -77,7 +77,7 @@ enum TransactionType {
   MSC_TYPE_METADEX_CANCEL_PRICE     = 26,
   MSC_TYPE_METADEX_CANCEL_PAIR      = 27,
   MSC_TYPE_METADEX_CANCEL_ECOSYSTEM = 28,
-  MSC_TYPE_NOTIFICATION             = 31,
+  MSC_TYPE_PUBLISH_FEED             = 31,
   MSC_TYPE_OFFER_ACCEPT_A_BET       = 40,
   MSC_TYPE_CREATE_PROPERTY_FIXED    = 50,
   MSC_TYPE_CREATE_PROPERTY_VARIABLE = 51,
@@ -179,6 +179,30 @@ public:
      */
     void RecordTransaction(const uint256& txid, uint32_t posInBlock);
     uint32_t FetchTransactionPosition(const uint256& txid);
+};
+
+/** LevelDB based storage for the feed database (contains all published feeds).
+ */
+class COmniFeedDB : public CDBBase
+{
+public:
+    COmniFeedDB(const boost::filesystem::path& path, bool fWipe)
+    {
+        leveldb::Status status = Open(path, fWipe);
+        PrintToConsole("Loading feed database: %s\n", status.ToString());
+    }
+
+    virtual ~COmniFeedDB()
+    {
+        PrintToLog("COmniFeedDB closed\n");
+    }
+
+    void RecordFeedValue(const std::string& address, uint16_t feedRef, int64_t feedValue, int block, int index, const uint256& txid);
+    bool GetFeedValue(const std::string& address, uint16_t feedRef, int64_t *feedValue, int *feedBlock, uint256 *feedTXID, int maxBlock=9999999);
+    std::set<uint16_t> GetAddressFeeds(const std::string& address);
+    std::set<std::pair<int,int64_t> > GetFeedHistory(const std::string& address, uint16_t feedRef);
+    int DeleteAboveBlock(int blocknum);
+    void PrintAll();
 };
 
 /** LevelDB based storage for STO recipients.
@@ -316,6 +340,7 @@ extern CMPTxList *p_txlistdb;
 extern CMPTradeList *t_tradelistdb;
 extern CMPSTOList *s_stolistdb;
 extern COmniTransactionDB *p_OmniTXDB;
+extern COmniFeedDB *p_feeddb;
 
 // TODO: move, rename
 extern CCoinsView viewDummy;

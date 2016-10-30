@@ -29,6 +29,7 @@ int64_t ParseDeadline(const json_spirit::Value& value);
 uint8_t ParseEarlyBirdBonus(const json_spirit::Value& value);
 uint8_t ParseIssuerBonus(const json_spirit::Value& value);
 uint8_t ParseMetaDExAction(const json_spirit::Value& value);
+uint16_t ParseFeedReference(const json_spirit::Value& value);
 CTransaction ParseTransaction(const json_spirit::Value& value);
 CMutableTransaction ParseMutableTransaction(const json_spirit::Value& value);
 CPubKey ParsePubKeyOrAddress(const json_spirit::Value& value);

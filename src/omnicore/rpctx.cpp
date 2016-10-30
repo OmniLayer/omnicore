@@ -93,6 +93,49 @@ Value omni_send(const Array& params, bool fHelp)
     }
 }
 
+// omni_sendpublishfeed - publish feed
+Value omni_sendpublishfeed(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 3)
+        throw runtime_error(
+            "omni_sendpublishfeed \"fromaddress\" feedreference feedvalue\n"
+
+            "\nCreate and broadcast a publish feed transaction.\n"
+
+            "\nArguments:\n"
+            "1. fromaddress          (string, required) the address to send from\n"
+            "2. feedreference        (number, required) the feed reference\n"
+            "3. feedvalue            (number, required) the value to publish\n"
+
+            "\nResult:\n"
+            "\"hash\"                  (string) the hex-encoded transaction hash\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("omni_sendpublishfeed", "\"3M9qvHKtgARhqcMtM5cRT9VaiDJ5PSfQGY\" 1 100")
+            + HelpExampleRpc("omni_sendpublishfeed", "\"3M9qvHKtgARhqcMtM5cRT9VaiDJ5PSfQGY\", 1, 100")
+        );
+
+    std::string fromAddress = ParseAddress(params[0]);
+    uint16_t feedRef = ParseFeedReference(params[1]);
+    int64_t feedValue = ParseAmount(params[2], false);
+
+    std::vector<unsigned char> payload = CreatePayload_PublishFeed(feedRef, feedValue);
+
+    uint256 txid;
+    std::string rawHex;
+    int result = WalletTxBuilder(fromAddress, "", fromAddress, 0, payload, txid, rawHex, autoCommit);
+
+    if (result != 0) {
+        throw JSONRPCError(result, error_str(result));
+    } else {
+        if (!autoCommit) {
+            return rawHex;
+        } else {
+            return txid.GetHex();
+        }
+    }
+}
+
 // omni_sendall - send all
 Value omni_sendall(const Array& params, bool fHelp)
 {

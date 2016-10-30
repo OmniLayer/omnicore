@@ -148,6 +148,149 @@ bool BalanceToJSON(const std::string& address, uint32_t property, Object& balanc
     }
 }
 
+// Obtains the current value for a feed
+Value omni_getfeed(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() < 2 || params.size() > 3)
+        throw runtime_error(
+            "omni_getfeed address feedreference ( block )\n"
+            "\nGet the current value for a feed.\n"
+            "\nArguments:\n"
+            "1. address           (string, required) the address publishing the feed\n"
+            "2. feedreference     (number, required) the feed reference\n"
+            "3. block             (number, optional) obtain the feed value as of block n\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"block\" : n,                  (number) the block this value was published\n"
+            "  \"txid\" : \"hash\",            (string) the hash of the transaction that published this value\n"
+            "  \"reference\" : n,              (number) the feed reference\n"
+            "  \"value\" : n,                  (number) the feed value\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getfeed", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\" 1")
+            + HelpExampleRpc("omni_getfeed", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\", 1")
+        );
+
+    std::string address = ParseAddress(params[0]);
+    uint16_t feedRef = ParseFeedReference(params[1]);
+    int maxBlock = 9999999;
+    if (2 < params.size()) {
+        maxBlock = params[2].get_int();
+    }
+
+    int feedBlock = 0;
+    int64_t feedValue = 0;
+    std::string feedDesc;
+    uint256 feedTXID = 0;
+
+    bool found = p_feeddb->GetFeedValue(address, feedRef, &feedValue, &feedBlock, &feedTXID, maxBlock);
+
+    if (!found) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "No data available for supplied address and feed reference.");
+    }
+
+    Object response;
+    response.push_back(Pair("block", feedBlock));
+    response.push_back(Pair("txid", feedTXID.GetHex()));
+    response.push_back(Pair("reference", feedRef));
+    response.push_back(Pair("value", feedValue));
+
+    return response;
+}
+
+// Lists the feeds published from a given address
+Value omni_getfeeds(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "omni_getfeeds address\n"
+            "\nGet the feeds published from an address.\n"
+            "\nArguments:\n"
+            "1. address           (string, required) the address to query for published feeds\n"
+            "\nResult:\n"
+            "[                    (array of JSON objects) a list of feeds\n"
+            "  {\n"
+            "    \"block\" : n,                  (number) the block this value was published\n"
+            "    \"txid\" : \"hash\",            (string) the hash of the transaction that published this value\n"
+            "    \"reference\" : n,              (number) the feed reference\n"
+            "    \"value\" : n,                  (number) the feed value\n"
+            "  },\n"
+            "  ...\n"
+            "]\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getfeeds", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\"")
+            + HelpExampleRpc("omni_getfeeds", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\"")
+        );
+
+    std::string address = ParseAddress(params[0]);
+
+    Array response;
+
+    std::set<uint16_t> addressFeeds = p_feeddb->GetAddressFeeds(address);
+    if (!addressFeeds.empty()) {
+        for (std::set<uint16_t>::iterator it = addressFeeds.begin(); it != addressFeeds.end(); it++) {
+            uint16_t feedRef = *it;
+            int feedBlock = 0;
+            int64_t feedValue = 0;
+            uint256 feedTXID = 0;
+            p_feeddb->GetFeedValue(address, feedRef, &feedValue, &feedBlock, &feedTXID);
+
+            Object responseObj;
+            responseObj.push_back(Pair("block", feedBlock));
+            responseObj.push_back(Pair("txid", feedTXID.GetHex()));
+            responseObj.push_back(Pair("reference", feedRef));
+            responseObj.push_back(Pair("value", feedValue));
+            response.push_back(responseObj);
+        }
+    }
+
+    return response;
+}
+
+// Obtains the historic values for a feed
+Value omni_getfeedhistory(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 2)
+        throw runtime_error(
+            "omni_getfeedhistory address feedreference\n"
+            "\nGet the history for a feed.\n"
+            "\nArguments:\n"
+            "1. address           (string, required) the address publishing the feed\n"
+            "2. feedreference     (number, required) the feed reference\n"
+            "\nResult:\n"
+            "[                    (array of JSON objects) a list of feed values\n"
+            "  {\n"
+            "    \"block\" : n,                  (number) the block this value was published\n"
+            "    \"value\" : n,                  (number) the feed value\n"
+            "  },\n"
+            "  ...\n"
+            "]\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getfeedhistory", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\" 1")
+            + HelpExampleRpc("omni_getfeedhistory", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\", 1")
+        );
+
+    std::string address = ParseAddress(params[0]);
+    uint16_t feedRef = ParseFeedReference(params[1]);
+
+    Array response;
+
+    std::set<std::pair<int,int64_t> > feedHistory = p_feeddb->GetFeedHistory(address, feedRef);
+
+    if (!feedHistory.empty()) {
+        for (std::set<std::pair<int,int64_t> >::iterator it = feedHistory.begin(); it != feedHistory.end(); it++) {
+            int feedBlock = (*it).first;
+            int64_t feedValue = (*it).second;
+            Object responseObj;
+            responseObj.push_back(Pair("block", feedBlock));
+            responseObj.push_back(Pair("value", feedValue));
+            response.push_back(responseObj);
+        }
+    }
+
+    return response;
+}
+
 // Obtains details of a fee distribution
 Value omni_getfeedistribution(const Array& params, bool fHelp)
 {
@@ -731,6 +874,11 @@ Value mscrpc(const Array& params, bool fHelp)
             PrintToConsole("%d / %d = %d\n",d,z,dd);
             PrintToConsole("%d / %d = %d\n",e,z,ee);
 
+            break;
+        }
+        case 15:
+        {
+            p_feeddb->PrintAll();
             break;
         }
         default:

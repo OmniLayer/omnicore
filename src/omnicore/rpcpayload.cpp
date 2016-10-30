@@ -566,3 +566,30 @@ Value omni_createpayload_cancelalltrades(const Array& params, bool fHelp)
     return HexStr(payload.begin(), payload.end());
 }
 
+Value omni_createpayload_publishfeed(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 3)
+        throw runtime_error(
+            "omni_createpayload_publishfeed feedreference feedvalue\n"
+
+            "\nCreate the payload for a publish feed transaction.\n"
+
+            "\nArguments:\n"
+            "2. feedreference        (number, required) the feed reference\n"
+            "3. feedvalue            (number, required) the value to publish\n"
+
+            "\nResult:\n"
+            "\"payload\"             (string) the hex-encoded payload\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("omni_createpayload_publishfeed", "1 \"100\"")
+            + HelpExampleRpc("omni_createpayload_publishfeed", "1, \"100\"")
+        );
+
+    uint16_t feedRef = ParseFeedReference(params[0]);
+    int64_t feedValue = ParseAmount(params[1], false);
+
+    std::vector<unsigned char> payload = CreatePayload_PublishFeed(feedRef, feedValue);
+
+    return HexStr(payload.begin(), payload.end());
+}
