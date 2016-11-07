@@ -57,6 +57,15 @@ uint32_t ParsePropertyId(const json_spirit::Value& value)
     return static_cast<uint32_t>(propertyId);
 }
 
+uint32_t ParsePropertyIdOrZero(const json_spirit::Value& value)
+{
+    int64_t propertyId = value.get_int64();
+    if (propertyId != 0 && (propertyId < 1 || 4294967295LL < propertyId)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Property identifier is out of range");
+    }
+    return static_cast<uint32_t>(propertyId);
+}
+
 int64_t ParseAmount(const json_spirit::Value& value, bool isDivisible)
 {
     int64_t amount = mastercore::StrToInt64(value.get_str(), isDivisible);

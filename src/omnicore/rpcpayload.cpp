@@ -259,15 +259,18 @@ Value omni_createpayload_issuancecrowdsale(const Array& params, bool fHelp)
     std::string name = ParseText(params[5]);
     std::string url = ParseText(params[6]);
     std::string data = ParseText(params[7]);
-    uint32_t propertyIdDesired = ParsePropertyId(params[8]);
+    uint32_t propertyIdDesired = ParsePropertyIdOrZero(params[8]);
     int64_t numTokens = ParseAmount(params[9], type);
     int64_t deadline = ParseDeadline(params[10]);
     uint8_t earlyBonus = ParseEarlyBirdBonus(params[11]);
     uint8_t issuerPercentage = ParseIssuerBonus(params[12]);
 
     RequirePropertyName(name);
-    RequireExistingProperty(propertyIdDesired);
-    RequireSameEcosystem(ecosystem, propertyIdDesired);
+
+    if (propertyIdDesired != BTC_PROPERTY_ID) {
+        RequireExistingProperty(propertyIdDesired);
+        RequireSameEcosystem(ecosystem, propertyIdDesired);
+    }
 
     std::vector<unsigned char> payload = CreatePayload_IssuanceVariable(ecosystem, type, previousId, category, subcategory, name, url, data, propertyIdDesired, numTokens, deadline, earlyBonus, issuerPercentage);
 

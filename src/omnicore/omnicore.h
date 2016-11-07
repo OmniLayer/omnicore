@@ -35,7 +35,7 @@ using std::string;
 int const MAX_STATE_HISTORY = 50;
 
 #define TEST_ECO_PROPERTY_1 (0x80000003UL)
-
+#define BTC_PROPERTY_ID 0
 // increment this value to force a refresh of the state (similar to --startclean)
 #define DB_VERSION 3
 
@@ -55,6 +55,7 @@ int const MAX_STATE_HISTORY = 50;
 // Omni Layer Transaction (Packet) Version
 #define MP_TX_PKT_V0  0
 #define MP_TX_PKT_V1  1
+#define MP_TX_PKT_V2  2
 
 #define MIN_PAYLOAD_SIZE     5
 #define PACKET_SIZE_CLASS_A 19
@@ -87,6 +88,7 @@ enum TransactionType {
   MSC_TYPE_GRANT_PROPERTY_TOKENS    = 55,
   MSC_TYPE_REVOKE_PROPERTY_TOKENS   = 56,
   MSC_TYPE_CHANGE_ISSUER_ADDRESS    = 70,
+  MSC_TYPE_BITCOIN_PAYMENT          = 80,
   OMNICORE_MESSAGE_TYPE_ACTIVATION  = 65534,
   OMNICORE_MESSAGE_TYPE_ALERT       = 65535
 };
@@ -308,6 +310,8 @@ int mastercore_handler_block_begin(int nBlockNow, CBlockIndex const * pBlockInde
 int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex, unsigned int);
 bool mastercore_handler_tx(const CTransaction& tx, int nBlock, unsigned int idx, const CBlockIndex* pBlockIndex);
 int mastercore_save_state( CBlockIndex const *pBlockIndex );
+
+int64_t GetBitcoinPaymentAmount(const uint256& txid, const std::string& recipient);
 
 namespace mastercore
 {

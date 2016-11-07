@@ -278,6 +278,7 @@ extern json_spirit::Value omni_sendrevoke(const json_spirit::Array& params, bool
 extern json_spirit::Value omni_sendclosecrowdsale(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value omni_sendchangeissuer(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value omni_sendall(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value omni_sendbtcpayment(const json_spirit::Array& params, bool fHelp);
 
 /* Omni Core payload creation calls */
 extern json_spirit::Value omni_createpayload_simplesend(const json_spirit::Array& params, bool fHelp);

@@ -29,6 +29,7 @@ void populateRPCTypeCloseCrowdsale(CMPTransaction& omniObj, json_spirit::Object&
 void populateRPCTypeGrant(CMPTransaction& omniObj, json_spirit::Object& txobj);
 void populateRPCTypeRevoke(CMPTransaction& omniOobj, json_spirit::Object& txobj);
 void populateRPCTypeChangeIssuer(CMPTransaction& omniObj, json_spirit::Object& txobj);
+void populateRPCTypeBitcoinPayment(CMPTransaction& omniObj, json_spirit::Object& txobj);
 void populateRPCTypeActivation(CMPTransaction& omniObj, json_spirit::Object& txobj);
 
 void populateRPCExtendedTypeSendToOwners(const uint256 txid, std::string extendedDetailsFilter, json_spirit::Object& txobj, uint16_t version);

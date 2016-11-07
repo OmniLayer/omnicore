@@ -16,6 +16,7 @@ std::string ParseAddress(const json_spirit::Value& value);
 std::string ParseAddressOrEmpty(const json_spirit::Value& value);
 std::string ParseAddressOrWildcard(const json_spirit::Value& value);
 uint32_t ParsePropertyId(const json_spirit::Value& value);
+uint32_t ParsePropertyIdOrZero(const json_spirit::Value& value);
 int64_t ParseAmount(const json_spirit::Value& value, bool isDivisible);
 int64_t ParseAmount(const json_spirit::Value& value, int propertyType);
 uint8_t ParseDExPaymentWindow(const json_spirit::Value& value);

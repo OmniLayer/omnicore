@@ -6,6 +6,7 @@
 #include "omnicore/convert.h"
 #include "omnicore/dex.h"
 #include "omnicore/fees.h"
+#include "omnicore/errors.h"
 #include "omnicore/log.h"
 #include "omnicore/mdex.h"
 #include "omnicore/notifications.h"
@@ -13,10 +14,12 @@
 #include "omnicore/rules.h"
 #include "omnicore/sp.h"
 #include "omnicore/sto.h"
+#include "omnicore/utilsbitcoin.h"
 
 #include "alert.h"
 #include "amount.h"
 #include "main.h"
+#include "rpcserver.h"
 #include "sync.h"
 #include "utiltime.h"
 
@@ -61,6 +64,7 @@ std::string mastercore::strTransactionType(uint16_t txType)
         case MSC_TYPE_REVOKE_PROPERTY_TOKENS: return "Revoke Property Tokens";
         case MSC_TYPE_CHANGE_ISSUER_ADDRESS: return "Change Issuer Address";
         case MSC_TYPE_NOTIFICATION: return "Notification";
+        case MSC_TYPE_BITCOIN_PAYMENT: return "Bitcoin Payment";
         case OMNICORE_MESSAGE_TYPE_ALERT: return "ALERT";
         case OMNICORE_MESSAGE_TYPE_ACTIVATION: return "Feature Activation";
 
@@ -149,6 +153,9 @@ bool CMPTransaction::interpret_Transaction()
         case MSC_TYPE_CHANGE_ISSUER_ADDRESS:
             return interpret_ChangeIssuer();
 
+        case MSC_TYPE_BITCOIN_PAYMENT:
+            return interpret_BitcoinPayment();
+
         case OMNICORE_MESSAGE_TYPE_ACTIVATION:
             return interpret_Activation();
 
@@ -176,6 +183,8 @@ bool CMPTransaction::interpret_TransactionType()
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t------------------------------\n");
+        PrintToLog("\t          sender: %s\n", sender);
+        PrintToLog("\t       recipient: %s\n", receiver);
         PrintToLog("\t         version: %d, class %s\n", txVersion, intToClass(encodingClass));
         PrintToLog("\t            type: %d (%s)\n", txType, strTransactionType(txType));
     }
@@ -628,6 +637,24 @@ bool CMPTransaction::interpret_ChangeIssuer()
     return true;
 }
 
+/** Tx 80 */
+bool CMPTransaction::interpret_BitcoinPayment()
+{
+    if (pkt_size < 36) {
+        return false;
+    }
+
+    const char* p = 4 + (char*) &pkt;
+    std::string hash(p);
+    linked_txid = ParseHashV(hash, "txid");
+
+    if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
+        PrintToLog("\t     linked txid: %s\n", linked_txid.GetHex());
+    }
+
+    return true;
+}
+
 /** Tx 65534 */
 bool CMPTransaction::interpret_Activation()
 {
@@ -750,6 +777,9 @@ int CMPTransaction::interpretPacket()
         case MSC_TYPE_CHANGE_ISSUER_ADDRESS:
             return logicMath_ChangeIssuer();
 
+        case MSC_TYPE_BITCOIN_PAYMENT:
+            return logicMath_BitcoinPayment();
+
         case OMNICORE_MESSAGE_TYPE_ACTIVATION:
             return logicMath_Activation();
 
@@ -770,6 +800,7 @@ int CMPTransaction::logicHelper_CrowdsaleParticipation()
         return (PKT_ERROR_CROWD -1);
     }
     // Active crowdsale, but not for this property
+    // Note property is 0 by default, ideally need a way to explicitly specify BTC
     if (pcrowdsale->getCurrDes() != property) {
         return (PKT_ERROR_CROWD -2);
     }
@@ -798,10 +829,11 @@ int CMPTransaction::logicHelper_CrowdsaleParticipation()
             tokens, close_crowdsale);
 
     if (msc_debug_sp) {
+        uint32_t crowdPropertyId = pcrowdsale->getPropertyId();
         PrintToLog("%s(): granting via crowdsale to user: %s %d (%s)\n",
-                __func__, FormatMP(property, tokens.first), property, strMPProperty(property));
+                __func__, FormatMP(crowdPropertyId, tokens.first), crowdPropertyId, strMPProperty(crowdPropertyId));
         PrintToLog("%s(): granting via crowdsale to issuer: %s %d (%s)\n",
-                __func__, FormatMP(property, tokens.second), property, strMPProperty(property));
+                __func__, FormatMP(crowdPropertyId, tokens.second), crowdPropertyId, strMPProperty(crowdPropertyId));
     }
 
     // Update the crowdsale object
@@ -1507,7 +1539,7 @@ int CMPTransaction::logicMath_CreatePropertyVariable()
         return (PKT_ERROR_SP -23);
     }
 
-    if (!_my_sps->hasSP(property)) {
+    if (version < MP_TX_PKT_V2 && !_my_sps->hasSP(property)) {
         PrintToLog("%s(): rejected: property %d does not exist\n", __func__, property);
         return (PKT_ERROR_SP -24);
     }
@@ -1909,6 +1941,130 @@ int CMPTransaction::logicMath_ChangeIssuer()
     sp.update_block = blockHash;
 
     assert(_my_sps->updateSP(property, sp));
+
+    return 0;
+}
+
+/** Tx 80 */
+int CMPTransaction::logicMath_BitcoinPayment()
+{
+    uint256 blockHash;
+    {
+        LOCK(cs_main);
+
+        CBlockIndex* pindex = chainActive[block];
+        if (pindex == NULL) {
+            PrintToLog("%s(): ERROR: block %d not in the active chain\n", __func__, block);
+            return (PKT_ERROR_TOKENS -20);
+        }
+        blockHash = pindex->GetBlockHash();
+    }
+
+    if (!IsTransactionTypeAllowed(block, property, type, version)) {
+        PrintToLog("%s(): rejected: type %d or version %d not permitted for property %d at block %d\n",
+                __func__,
+                type,
+                version,
+                property,
+                block);
+        return (PKT_ERROR_TOKENS -22);
+    }
+
+    CTransaction linked_tx;
+    uint256 linked_blockHash = 0;
+    int linked_blockHeight = 0;
+    int linked_blockTime = 0;
+
+    if (!GetTransaction(linked_txid, linked_tx, linked_blockHash, true)) {
+        PrintToLog("%s(): rejected: linked transaction %s does not exist\n",
+                __func__,
+                linked_txid.GetHex());
+        return MP_TX_NOT_FOUND;
+    }
+
+    if (linked_blockHash == 0) { // linked transaction is unconfirmed (and thus not yet added to state), cannot process payment
+        PrintToLog("%s(): rejected: linked transaction %s does not exist (unconfirmed)\n",
+                __func__,
+                linked_txid.GetHex());
+        return MP_TX_NOT_FOUND;
+    }
+
+    CBlockIndex* pBlockIndex = GetBlockIndex(linked_blockHash);
+    if (NULL != pBlockIndex) {
+        linked_blockHeight = pBlockIndex->nHeight;
+        linked_blockTime = pBlockIndex->nTime;
+    }
+
+    CMPTransaction mp_obj;
+    int parseRC = ParseTransaction(linked_tx, linked_blockHeight, 0, mp_obj, linked_blockTime);
+    if (parseRC < 0) {
+        PrintToLog("%s(): rejected: linked transaction %s is not an Omni layer transaction\n",
+                __func__,
+                linked_txid.GetHex());
+        return MP_TX_IS_NOT_MASTER_PROTOCOL;
+    }
+
+    if (!mp_obj.interpret_Transaction()) {
+        PrintToLog("%s(): rejected: linked transaction %s is not an Omni layer transaction\n",
+                __func__,
+                linked_txid.GetHex());
+        return MP_TX_IS_NOT_MASTER_PROTOCOL;
+    }
+
+    bool linked_valid = false;
+    {
+        LOCK(cs_tally);
+        linked_valid = getValidMPTX(linked_txid);
+    }
+    if (!linked_valid) {
+        PrintToLog("%s(): rejected: linked transaction %s is an invalid transaction\n",
+                __func__,
+                linked_txid.GetHex());
+        return MP_TX_IS_NOT_MASTER_PROTOCOL -101;
+    }
+
+    uint16_t linked_type = mp_obj.getType();
+    uint16_t linked_version = mp_obj.getVersion();
+    if (!IsBitcoinPaymentAllowed(linked_type, linked_version)) {
+        PrintToLog("%s(): rejected: linked transaction %s doesn't support bitcoin payments\n",
+                __func__,
+                linked_txid.GetHex());
+        return (PKT_ERROR_TOKENS -61);
+    }
+
+    std::string linked_sender = mp_obj.getSender();
+    nValue = GetBitcoinPaymentAmount(txid, linked_sender);
+    PrintToLog("\tlinked tx sender: %s\n", linked_sender);
+    PrintToLog("\t  psyment amount: %s\n", FormatDivisibleMP(nValue));
+
+    if (nValue == 0) {
+        PrintToLog("%s(): rejected: no payment to sender of linked transaction\n",
+                __func__,
+                linked_sender,
+                linked_txid.GetHex());
+        return (PKT_ERROR_TOKENS -62);
+    }
+
+    // empty receiver & receiver == linked_sender checks are skipped, since we don't care if the payment was last vout
+
+    if (linked_type == MSC_TYPE_CREATE_PROPERTY_VARIABLE) {
+        CMPCrowd* pcrowdsale = getCrowd(receiver);
+        if (pcrowdsale == NULL) {
+            PrintToLog("%s(): rejected: receiver %s does not have an active crowdsale\n", __func__, receiver);
+            return (PKT_ERROR_TOKENS -47);
+        }
+
+        // confirm the crowdsale that the receiver has open now is the same as the transaction referenced in the payment
+        // CMPCrowd class doesn't contain txid, work around by comparing propid for current crowdsale & propid for linked crowdsale
+        uint32_t crowdPropertyId = pcrowdsale->getPropertyId();
+        uint32_t linkPropertyId = _my_sps->findSPByTX(linked_txid); // TODO: Is this safe to lookup the crowdsale this way??
+        if (linkPropertyId != crowdPropertyId) {
+            PrintToLog("%s(): rejected: active crowdsale for receiver %s did not originate from linked txid\n", __func__, receiver);
+            return (PKT_ERROR_TOKENS -48);
+        }
+
+        logicHelper_CrowdsaleParticipation();
+    }
 
     return 0;
 }

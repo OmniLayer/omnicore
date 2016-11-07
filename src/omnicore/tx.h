@@ -93,6 +93,9 @@ private:
     uint32_t activation_block;
     uint32_t min_client_version;
 
+    // Bitcoin Payment
+    uint256 linked_txid;
+
     // Indicates whether the transaction can be used to execute logic
     bool rpcOnly;
 
@@ -119,6 +122,7 @@ private:
     bool interpret_GrantTokens();
     bool interpret_RevokeTokens();
     bool interpret_ChangeIssuer();
+    bool interpret_BitcoinPayment();
     bool interpret_Activation();
     bool interpret_Alert();
 
@@ -141,6 +145,7 @@ private:
     int logicMath_GrantTokens();
     int logicMath_RevokeTokens();
     int logicMath_ChangeIssuer();
+    int logicMath_BitcoinPayment();
     int logicMath_Activation();
     int logicMath_Alert();
 
@@ -200,6 +205,7 @@ public:
     uint32_t getMinClientVersion() const { return min_client_version; }
     unsigned int getIndexInBlock() const { return tx_idx; }
     uint32_t getDistributionProperty() const { return distribution_property; }
+    uint256 getLinkedTXID() const { return linked_txid; }
 
     /** Creates a new CMPTransaction object. */
     CMPTransaction()

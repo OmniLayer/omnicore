@@ -34,6 +34,8 @@ const uint16_t FEATURE_TRADEALLPAIRS = 8;
 const uint16_t FEATURE_FEES = 9;
 //! Feature identifier to enable cross property (v1) Send To Owners
 const uint16_t FEATURE_STOV1 = 10;
+//! Feature identifier to enable BTC in crowdsales
+const uint16_t FEATURE_BTC_CROWDSALES = 11;
 
 //! When (propertyTotalTokens / OMNI_FEE_THRESHOLD) is reached fee distribution will occur
 const int64_t OMNI_FEE_THRESHOLD = 100000; // 0.001%
@@ -115,6 +117,8 @@ public:
     int MSC_BET_BLOCK;
     //! Block to enable cross property STO (v1)
     int MSC_STOV1_BLOCK;
+    //! Block to enable BTC in crowdsales
+    int MSC_BTC_CROWDSALE_BLOCK;
 
     //! Block to deactivate crowdsale participations when "granting tokens"
     int GRANTEFFECTS_FEATURE_BLOCK;
@@ -196,6 +200,8 @@ bool IsAllowedInputType(int whichType, int nBlock);
 bool IsAllowedOutputType(int whichType, int nBlock);
 /** Checks, if the transaction type and version is supported and enabled. */
 bool IsTransactionTypeAllowed(int txBlock, uint32_t txProperty, uint16_t txType, uint16_t version);
+/** Checks, if the transaction type and version permit Bitcoin payments */
+bool IsBitcoinPaymentAllowed(uint16_t type, uint16_t version);
 
 /** Compares a supplied block, block hash and consensus hash against a hardcoded list of checkpoints. */
 bool VerifyCheckpoint(int block, const uint256& blockHash);
