@@ -533,9 +533,11 @@ int mastercore::MetaDEx_CANCEL_AT_PRICE(const uint256& txid, unsigned int block,
 
     if (msc_debug_metadex2) MetaDEx_debug_print();
 
+    int numCancelled = 0;
+
     if (!prices) {
-        PrintToLog("%s() NOTHING FOUND for %s\n", __FUNCTION__, mdex.ToString());
-        return rc -1;
+        PrintToLog("%s(): FOUND 0 MATCHING TRADES (no active trades selling property %d).\n", __FUNCTION__, prop);
+        return 0; // cancels do not require matching trades to be valid
     }
 
     // within the desired property map (given one property) iterate over the items
@@ -556,7 +558,6 @@ int mastercore::MetaDEx_CANCEL_AT_PRICE(const uint256& txid, unsigned int block,
                 continue;
             }
 
-            rc = 0;
             PrintToLog("%s(): REMOVING %s\n", __FUNCTION__, p_mdex->ToString());
 
             // move from reserve to main
@@ -568,10 +569,16 @@ int mastercore::MetaDEx_CANCEL_AT_PRICE(const uint256& txid, unsigned int block,
             p_txlistdb->recordMetaDExCancelTX(txid, p_mdex->getHash(), bValid, block, p_mdex->getProperty(), p_mdex->getAmountRemaining());
 
             indexes->erase(iitt++);
+            numCancelled++;
         }
     }
 
-    if (msc_debug_metadex2) MetaDEx_debug_print();
+    PrintToLog("%s(): FOUND %d MATCHING TRADES.\n", __FUNCTION__, numCancelled);
+    rc = 0; // cancels do not require matching trades to be valid
+
+    if (numCancelled) {
+        if (msc_debug_metadex2) MetaDEx_debug_print();
+    }
 
     return rc;
 }
@@ -586,9 +593,11 @@ int mastercore::MetaDEx_CANCEL_ALL_FOR_PAIR(const uint256& txid, unsigned int bl
 
     if (msc_debug_metadex3) MetaDEx_debug_print();
 
+    int numCancelled = 0;
+
     if (!prices) {
-        PrintToLog("%s() NOTHING FOUND\n", __FUNCTION__);
-        return rc -1;
+        PrintToLog("%s(): FOUND 0 MATCHING TRADES (no active trades selling property %d).\n", __FUNCTION__, prop);
+        return 0; // cancels do not require matching trades to be valid
     }
 
     // within the desired property map (given one property) iterate over the items
@@ -605,7 +614,6 @@ int mastercore::MetaDEx_CANCEL_ALL_FOR_PAIR(const uint256& txid, unsigned int bl
                 continue;
             }
 
-            rc = 0;
             PrintToLog("%s(): REMOVING %s\n", __FUNCTION__, p_mdex->ToString());
 
             // move from reserve to main
@@ -617,10 +625,16 @@ int mastercore::MetaDEx_CANCEL_ALL_FOR_PAIR(const uint256& txid, unsigned int bl
             p_txlistdb->recordMetaDExCancelTX(txid, p_mdex->getHash(), bValid, block, p_mdex->getProperty(), p_mdex->getAmountRemaining());
 
             indexes->erase(iitt++);
+            numCancelled++;
         }
     }
 
-    if (msc_debug_metadex3) MetaDEx_debug_print();
+    PrintToLog("%s(): FOUND %d MATCHING TRADES.\n", __FUNCTION__, numCancelled);
+    rc = 0; // cancels do not require matching trades to be valid
+
+    if (numCancelled) {
+        if (msc_debug_metadex3) MetaDEx_debug_print();
+    }
 
     return rc;
 }
@@ -635,6 +649,8 @@ int mastercore::MetaDEx_CANCEL_EVERYTHING(const uint256& txid, unsigned int bloc
     PrintToLog("%s()\n", __FUNCTION__);
 
     if (msc_debug_metadex2) MetaDEx_debug_print();
+
+    int numCancelled = 0;
 
     PrintToLog("<<<<<<\n");
 
@@ -662,7 +678,6 @@ int mastercore::MetaDEx_CANCEL_EVERYTHING(const uint256& txid, unsigned int bloc
                     continue;
                 }
 
-                rc = 0;
                 PrintToLog("%s(): REMOVING %s\n", __FUNCTION__, it->ToString());
 
                 // move from reserve to balance
@@ -674,12 +689,18 @@ int mastercore::MetaDEx_CANCEL_EVERYTHING(const uint256& txid, unsigned int bloc
                 p_txlistdb->recordMetaDExCancelTX(txid, it->getHash(), bValid, block, it->getProperty(), it->getAmountRemaining());
 
                 indexes.erase(it++);
+                numCancelled++;
             }
         }
     }
     PrintToLog(">>>>>>\n");
 
-    if (msc_debug_metadex2) MetaDEx_debug_print();
+    PrintToLog("%s(): FOUND %d MATCHING TRADES.\n", __FUNCTION__, numCancelled);
+    rc = 0; // cancels do not require matching trades to be valid
+
+    if (numCancelled) {
+        if (msc_debug_metadex2) MetaDEx_debug_print();
+    }
 
     return rc;
 }
