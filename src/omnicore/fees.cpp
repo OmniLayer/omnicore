@@ -200,7 +200,7 @@ void COmniFeeCache::DistributeCache(const uint32_t &propertyId, int block)
         int64_t will_really_receive = it->first;
         sent_so_far += will_really_receive;
         if (msc_debug_fees) PrintToLog("  %s receives %d (running total %d of %d)\n", address, will_really_receive, sent_so_far, cachedAmount);
-        assert(update_tally_map(address, propertyId, will_really_receive, BALANCE));
+        assert(update_tally_map(address, propertyId, will_really_receive, BALANCE, 0, "Fee Distribution", strprintf("%s line %d",__FUNCTION__,__LINE__)));
         feeHistoryItem recipient(address, will_really_receive);
         historyItems.insert(recipient);
     }

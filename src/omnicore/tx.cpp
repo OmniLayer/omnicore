@@ -3,6 +3,7 @@
 #include "omnicore/tx.h"
 
 #include "omnicore/activation.h"
+#include "omnicore/auditor.h"
 #include "omnicore/convert.h"
 #include "omnicore/dex.h"
 #include "omnicore/fees.h"
@@ -840,10 +841,15 @@ int CMPTransaction::logicHelper_CrowdsaleParticipation()
 
     // Credit tokens for this fundraiser
     if (tokens.first > 0) {
-        assert(update_tally_map(sender, pcrowdsale->getPropertyId(), tokens.first, BALANCE));
+        assert(update_tally_map(sender, pcrowdsale->getPropertyId(), tokens.first, BALANCE, txid, "Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)));
     }
     if (tokens.second > 0) {
-        assert(update_tally_map(receiver, pcrowdsale->getPropertyId(), tokens.second, BALANCE));
+        assert(update_tally_map(receiver, pcrowdsale->getPropertyId(), tokens.second, BALANCE, txid, "Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+    }
+
+    // notify the auditor that we've created some tokens
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, pcrowdsale->getPropertyId(), tokens.first+tokens.second, "Crowdsale Purchase (txid: " + txid.GetHex() + ")");
     }
 
     // Close crowdsale, if we hit MAX_TOKENS
@@ -901,8 +907,8 @@ int CMPTransaction::logicMath_SimpleSend()
     }
 
     // Move the tokens
-    assert(update_tally_map(sender, property, -nValue, BALANCE));
-    assert(update_tally_map(receiver, property, nValue, BALANCE));
+    assert(update_tally_map(sender, property, -nValue, BALANCE, txid, "Simple Send", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+    assert(update_tally_map(receiver, property, nValue, BALANCE, txid, "Simple Send", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
     // Is there an active crowdsale running from this recepient?
     logicHelper_CrowdsaleParticipation();
@@ -998,9 +1004,10 @@ int CMPTransaction::logicMath_SendToOwners()
 
     // ------------------------------------------
 
-    assert(update_tally_map(sender, feeProperty, -transferFee, BALANCE));
+    assert(update_tally_map(sender, feeProperty, -transferFee, BALANCE, txid, "Send To Owners Fee", strprintf("%s line %d",__FUNCTION__,__LINE__)));
     if (version == MP_TX_PKT_V0) {
-        // v0 - do not credit the subtracted fee to any tally (ie burn the tokens)
+        // v0 - do not credit the subtracted fee to any tally (ie burn the tokens) - notify auditor
+        if (auditorEnabled) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_DECREASE, feeProperty, transferFee, "Send To Owners Fee (txid: " + txid.GetHex() + ")");
     } else {
         // v1 - credit the subtracted fee to the fee cache
         p_feecache->AddFee(feeProperty, block, transferFee);
@@ -1015,8 +1022,8 @@ int CMPTransaction::logicMath_SendToOwners()
         sent_so_far += will_really_receive;
 
         // real execution of the loop
-        assert(update_tally_map(sender, property, -will_really_receive, BALANCE));
-        assert(update_tally_map(address, property, will_really_receive, BALANCE));
+        assert(update_tally_map(sender, property, -will_really_receive, BALANCE, txid, "Send To Owners", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+        assert(update_tally_map(address, property, will_really_receive, BALANCE, txid, "Send To Owners", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
         // add to stodb
         s_stolistdb->recordSTOReceive(address, txid, block, property, will_really_receive);
@@ -1075,8 +1082,8 @@ int CMPTransaction::logicMath_SendAll()
         int64_t moneyAvailable = ptally->getMoney(propertyId, BALANCE);
         if (moneyAvailable > 0) {
             ++numberOfPropertiesSent;
-            assert(update_tally_map(sender, propertyId, -moneyAvailable, BALANCE));
-            assert(update_tally_map(receiver, propertyId, moneyAvailable, BALANCE));
+            assert(update_tally_map(sender, propertyId, -moneyAvailable, BALANCE, txid, "Send All", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(receiver, propertyId, moneyAvailable, BALANCE, txid, "Send All", strprintf("%s line %d",__FUNCTION__,__LINE__)));
             p_txlistdb->recordSendAllSubRecord(txid, numberOfPropertiesSent, propertyId, moneyAvailable);
         }
     }
@@ -1477,7 +1484,15 @@ int CMPTransaction::logicMath_CreatePropertyFixed()
 
     const uint32_t propertyId = _my_sps->putSP(ecosystem, newSP);
     assert(propertyId > 0);
-    assert(update_tally_map(sender, propertyId, nValue, BALANCE));
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyCreated(propertyId);
+    }
+
+    assert(update_tally_map(sender, propertyId, nValue, BALANCE,  txid, "Fixed property issuance", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, propertyId, nValue, "Fixed issuance (txid: " + txid.GetHex() + ")");
+    }
 
     return 0;
 }
@@ -1581,6 +1596,11 @@ int CMPTransaction::logicMath_CreatePropertyVariable()
 
     PrintToLog("CREATED CROWDSALE id: %d value: %d property: %d\n", propertyId, nValue, property);
 
+    // notify the auditor that we've created a new token
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyCreated(propertyId);
+    }
+
     return 0;
 }
 
@@ -1642,7 +1662,7 @@ int CMPTransaction::logicMath_CloseCrowdsale()
 
     assert(_my_sps->updateSP(property, sp));
     if (missedTokens > 0) {
-        assert(update_tally_map(sp.issuer, property, missedTokens, BALANCE));
+        assert(update_tally_map(sp.issuer, property, missedTokens, BALANCE, txid, "Close crowdsale (fractional catchup)", strprintf("%s line %d",__FUNCTION__,__LINE__)));
     }
     my_crowds.erase(it);
 
@@ -1711,6 +1731,11 @@ int CMPTransaction::logicMath_CreatePropertyManaged()
     assert(propertyId > 0);
 
     PrintToLog("CREATED MANUAL PROPERTY id: %d admin: %s\n", propertyId, sender);
+
+    // notify the auditor that we've created a new token
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyCreated(propertyId);
+    }
 
     return 0;
 }
@@ -1785,13 +1810,18 @@ int CMPTransaction::logicMath_GrantTokens()
     // Persist the number of granted tokens
     assert(_my_sps->updateSP(property, sp));
 
+    // notify the auditor that we've granted some tokens
+    if (auditorEnabled) {
+        Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, property, nValue, "Grant (txid: " + txid.GetHex() + ")");
+    }
+
     // Special case: if can't find the receiver -- assume grant to self!
     if (receiver.empty()) {
         receiver = sender;
     }
 
     // Move the tokens
-    assert(update_tally_map(receiver, property, nValue, BALANCE));
+    assert(update_tally_map(receiver, property, nValue, BALANCE, txid, "Token Grant", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
     /**
      * As long as the feature to disable the side effects of "granting tokens"
@@ -1867,8 +1897,11 @@ int CMPTransaction::logicMath_RevokeTokens()
     sp.historicalData.insert(std::make_pair(txid, dataPt));
     sp.update_block = blockHash;
 
-    assert(update_tally_map(sender, property, -nValue, BALANCE));
+    assert(update_tally_map(sender, property, -nValue, BALANCE, txid, "Token Revoke", strprintf("%s line %d",__FUNCTION__,__LINE__)));
     assert(_my_sps->updateSP(property, sp));
+
+    // notify the auditor that we've revoked some tokens
+    if (auditorEnabled) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_DECREASE, property, nValue, "Revoke (txid: " + txid.GetHex() + ")");
 
     return 0;
 }

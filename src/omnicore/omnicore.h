@@ -56,6 +56,10 @@ int const MAX_STATE_HISTORY = 50;
 #define MP_TX_PKT_V0  0
 #define MP_TX_PKT_V1  1
 
+// Auditor increase/decrease
+#define OMNI_AUDITOR_DECREASE 0
+#define OMNI_AUDITOR_INCREASE 1
+
 #define MIN_PAYLOAD_SIZE     5
 #define PACKET_SIZE_CLASS_A 19
 #define PACKET_SIZE         31
@@ -351,7 +355,7 @@ bool UseEncodingClassC(size_t nDataSize);
 
 bool getValidMPTX(const uint256 &txid, int *block = NULL, unsigned int *type = NULL, uint64_t *nAmended = NULL);
 
-bool update_tally_map(const std::string& who, uint32_t propertyId, int64_t amount, TallyType ttype);
+bool update_tally_map(const std::string& who, uint32_t propertyId, int64_t amount, TallyType ttype, uint256 txid, const std::string& updateReason, const std::string& caller);
 
 std::string getTokenLabel(uint32_t propertyId);
 }

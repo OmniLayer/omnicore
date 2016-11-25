@@ -846,7 +846,7 @@ unsigned int mastercore::eraseExpiredCrowdsale(const CBlockIndex* pBlockIndex)
 
             // update values
             if (missedTokens > 0) {
-                assert(update_tally_map(sp.issuer, crowdsale.getPropertyId(), missedTokens, BALANCE));
+                assert(update_tally_map(sp.issuer, crowdsale.getPropertyId(), missedTokens, BALANCE, sp.txid, "Close Expired Crowdsale", strprintf("%s line %d",__FUNCTION__,__LINE__)));
             }
 
             my_crowds.erase(my_it++);

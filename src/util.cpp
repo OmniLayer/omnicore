@@ -107,6 +107,8 @@ bool fLogIPs = false;
 volatile bool fReopenDebugLog = false;
 /** Flag to indicate, whether the Omni Core log file should be reopened. */
 volatile bool fReopenOmniCoreLog = false;
+/** Flag to indicate, whether the audit log file should be reopened. */
+volatile bool fReopenAuditLog = false;
 
 /** Init OpenSSL library multithreading support */
 static CCriticalSection** ppmutexOpenSSL;

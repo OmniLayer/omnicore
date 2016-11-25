@@ -39,6 +39,8 @@ extern bool fLogIPs;
 extern volatile bool fReopenDebugLog;
 /** Flag to indicate, whether the Omni Core log file should be reopened. */
 extern volatile bool fReopenOmniCoreLog;
+/** Flag to indicate, whether the audit log file should be reopened. */
+extern volatile bool fReopenAuditLog;
 
 void SetupEnvironment();
 

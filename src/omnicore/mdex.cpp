@@ -278,12 +278,12 @@ static MatchReturnType x_Trade(CMPMetaDEx* const pnew)
             }
 
             // transfer the payment property from buyer to seller
-            assert(update_tally_map(pnew->getAddr(), pnew->getProperty(), -seller_amountGot, BALANCE));
-            assert(update_tally_map(pold->getAddr(), pold->getDesProperty(), seller_amountGot, BALANCE));
+            assert(update_tally_map(pnew->getAddr(), pnew->getProperty(), -seller_amountGot, BALANCE, pnew->getHash(), "MetaDEx Trade Match (new)", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(pold->getAddr(), pold->getDesProperty(), seller_amountGot, BALANCE, pold->getHash(), "MetaDEx Trade Match (existing)", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
             // transfer the market (the one being sold) property from seller to buyer
-            assert(update_tally_map(pold->getAddr(), pold->getProperty(), -buyer_amountGot, METADEX_RESERVE));
-            assert(update_tally_map(pnew->getAddr(), pnew->getDesProperty(), buyer_amountGotAfterFee, BALANCE));
+            assert(update_tally_map(pold->getAddr(), pold->getProperty(), -buyer_amountGot, METADEX_RESERVE, pold->getHash(), "MetaDEx Trade Match (existing)", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(pnew->getAddr(), pnew->getDesProperty(), buyer_amountGotAfterFee, BALANCE, pnew->getHash(), "MetaDEx Trade Match (new)", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
             NewReturn = TRADED;
 
@@ -510,8 +510,8 @@ int mastercore::MetaDEx_ADD(const std::string& sender_addr, uint32_t prop, int64
             return METADEX_ERROR -70;
         } else {
             // move tokens into reserve
-            assert(update_tally_map(sender_addr, prop, -new_mdex.getAmountRemaining(), BALANCE));
-            assert(update_tally_map(sender_addr, prop, new_mdex.getAmountRemaining(), METADEX_RESERVE));
+            assert(update_tally_map(sender_addr, prop, -new_mdex.getAmountRemaining(), BALANCE, txid, "MetaDEx Trade", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(sender_addr, prop, new_mdex.getAmountRemaining(), METADEX_RESERVE, txid, "MetaDEx Trade", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
             if (msc_debug_metadex1) PrintToLog("==== INSERTED: %s= %s\n", xToString(new_mdex.unitPrice()), new_mdex.ToString());
             if (msc_debug_metadex3) MetaDEx_debug_print();
@@ -560,8 +560,8 @@ int mastercore::MetaDEx_CANCEL_AT_PRICE(const uint256& txid, unsigned int block,
             PrintToLog("%s(): REMOVING %s\n", __FUNCTION__, p_mdex->ToString());
 
             // move from reserve to main
-            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), -p_mdex->getAmountRemaining(), METADEX_RESERVE));
-            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountRemaining(), BALANCE));
+            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), -p_mdex->getAmountRemaining(), METADEX_RESERVE, txid, "MetaDEx Cancel Price", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountRemaining(), BALANCE, txid, "MetaDEx Cancel Price", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
             // record the cancellation
             bool bValid = true;
@@ -609,8 +609,8 @@ int mastercore::MetaDEx_CANCEL_ALL_FOR_PAIR(const uint256& txid, unsigned int bl
             PrintToLog("%s(): REMOVING %s\n", __FUNCTION__, p_mdex->ToString());
 
             // move from reserve to main
-            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), -p_mdex->getAmountRemaining(), METADEX_RESERVE));
-            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountRemaining(), BALANCE));
+            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), -p_mdex->getAmountRemaining(), METADEX_RESERVE, txid, "MetaDEx Cancel Pair", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(p_mdex->getAddr(), p_mdex->getProperty(), p_mdex->getAmountRemaining(), BALANCE, txid, "MetaDEx Cancel Pair", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
             // record the cancellation
             bool bValid = true;
@@ -666,8 +666,8 @@ int mastercore::MetaDEx_CANCEL_EVERYTHING(const uint256& txid, unsigned int bloc
                 PrintToLog("%s(): REMOVING %s\n", __FUNCTION__, it->ToString());
 
                 // move from reserve to balance
-                assert(update_tally_map(it->getAddr(), it->getProperty(), -it->getAmountRemaining(), METADEX_RESERVE));
-                assert(update_tally_map(it->getAddr(), it->getProperty(), it->getAmountRemaining(), BALANCE));
+                assert(update_tally_map(it->getAddr(), it->getProperty(), -it->getAmountRemaining(), METADEX_RESERVE, txid, "MetaDEx Cancel All", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+                assert(update_tally_map(it->getAddr(), it->getProperty(), it->getAmountRemaining(), BALANCE, txid, "MetaDEx Cancel All", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
                 // record the cancellation
                 bool bValid = true;

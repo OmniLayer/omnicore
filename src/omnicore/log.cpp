@@ -16,7 +16,7 @@
 
 // Default log files
 const std::string LOG_FILENAME    = "omnicore.log";
-
+const std::string AUDIT_FILENAME  = "omnicore_audit.log";
 // Options
 static const long LOG_BUFFERSIZE  =  8000000; //  8 MB
 static const long LOG_SHRINKSIZE  = 50000000; // 50 MB
@@ -65,6 +65,9 @@ bool msc_debug_alerts             = 1;
 bool msc_debug_consensus_hash_every_transaction = 0;
 //! Debug fees
 bool msc_debug_fees               = 1;
+//! Debug auditor
+bool omni_debug_auditor           = 0;
+bool omni_debug_auditor_verbose   = 0;
 
 /**
  * LogPrintf() has been broken a couple of times now
@@ -77,14 +80,18 @@ bool msc_debug_fees               = 1;
  * the mutex).
  */
 static boost::once_flag debugLogInitFlag = BOOST_ONCE_INIT;
+static boost::once_flag auditLogInitFlag = BOOST_ONCE_INIT;
 /**
  * We use boost::call_once() to make sure these are initialized
  * in a thread-safe manner the first time called:
  */
 static FILE* fileout = NULL;
 static boost::mutex* mutexDebugLog = NULL;
+static FILE* auditout = NULL;
+static boost::mutex* mutexAuditLog = NULL;
 /** Flag to indicate, whether the Omni Core log file should be reopened. */
 extern volatile bool fReopenOmniCoreLog;
+extern volatile bool fReopenAuditLog;
 
 /**
  * Returns path for debug log file.
@@ -105,6 +112,25 @@ static boost::filesystem::path GetLogPath()
     }
 
     return pathLogFile;
+}
+
+/**
+ * Opens audit log file.
+ */
+static void AuditLogInit()
+{
+    assert(auditout == NULL);
+    assert(mutexAuditLog == NULL);
+
+    boost::filesystem::path pathAudit = GetDataDir() / AUDIT_FILENAME;
+    auditout = fopen(pathAudit.string().c_str(), "a");
+    if (auditout) {
+        setbuf(auditout, NULL); // Unbuffered
+    } else {
+        PrintToConsole("Failed to open audit log file: %s\n", pathAudit.string());
+    }
+
+    mutexAuditLog = new boost::mutex();
 }
 
 /**
@@ -182,6 +208,49 @@ int LogFilePrint(const std::string& str)
             fStartedNewLine = false;
         }
         ret += fwrite(str.data(), 1, str.size(), fileout);
+    }
+
+    return ret;
+}
+
+/**
+ + * Clone of LogFilePrint for audit log.
+ + */
+int LogAuditPrint(const std::string& str)
+{
+    int ret = 0; // Number of characters written
+    if (fPrintToConsole) {
+        // Print to console
+        ret = ConsolePrint(str);
+    }
+    else if (fPrintToDebugLog && AreBaseParamsConfigured()) {
+        static bool fStartedNewLine = true;
+        boost::call_once(&AuditLogInit, auditLogInitFlag);
+
+        if (auditout == NULL) {
+            return ret;
+        }
+        boost::mutex::scoped_lock scoped_lock(*mutexAuditLog);
+
+        // Reopen the log file, if requested
+        if (fReopenAuditLog) {
+            fReopenAuditLog = false;
+            boost::filesystem::path pathAudit = GetDataDir() / AUDIT_FILENAME;
+            if (freopen(pathAudit.string().c_str(), "a", auditout) != NULL) {
+                setbuf(auditout, NULL); // Unbuffered
+            }
+        }
+
+        // Printing log timestamps can be useful for profiling
+        if (fLogTimestamps && fStartedNewLine) {
+            ret += fprintf(auditout, "%s ", GetTimestamp().c_str());
+        }
+        if (!str.empty() && str[str.size()-1] == '\n') {
+            fStartedNewLine = true;
+        } else {
+            fStartedNewLine = false;
+        }
+        ret += fwrite(str.data(), 1, str.size(), auditout);
     }
 
     return ret;
@@ -266,6 +335,8 @@ void InitDebugLogLevels()
         if (*it == "alerts") msc_debug_alerts = true;
         if (*it == "consensus_hash_every_transaction") msc_debug_consensus_hash_every_transaction = true;
         if (*it == "fees") msc_debug_fees = true;
+        if (*it == "auditor") omni_debug_auditor = true;
+        if (*it == "auditor_verbose") omni_debug_auditor_verbose = true;
         if (*it == "none" || *it == "all") {
             bool allDebugState = false;
             if (*it == "all") allDebugState = true;
@@ -302,38 +373,47 @@ void InitDebugLogLevels()
             msc_debug_alerts = allDebugState;
             msc_debug_consensus_hash_every_transaction = allDebugState;
             msc_debug_fees = allDebugState;
+            omni_debug_auditor = allDebugState;
+            omni_debug_auditor_verbose = allDebugState;
+
         }
     }
 }
 
 /**
- * Scrolls debug log, if it's getting too big.
+ * Scrolls debug and audit log, if it's getting too big.
  */
 void ShrinkDebugLog()
 {
-    boost::filesystem::path pathLog = GetLogPath();
-    FILE* file = fopen(pathLog.string().c_str(), "r");
-
-    if (file && boost::filesystem::file_size(pathLog) > LOG_SHRINKSIZE) {
-        // Restart the file with some of the end
-        char* pch = new char[LOG_BUFFERSIZE];
-        if (NULL != pch) {
-            fseek(file, -LOG_BUFFERSIZE, SEEK_END);
-            int nBytes = fread(pch, 1, LOG_BUFFERSIZE, file);
-            fclose(file);
-            file = NULL;
-
-            file = fopen(pathLog.string().c_str(), "w");
-            if (file) {
-                fwrite(pch, 1, nBytes, file);
+    for (int i=1; i<=2; ++i) { // do this twice, once for debug, once for audit
+        boost::filesystem::path pathLog;
+        if (i == 1) {
+            pathLog = GetLogPath();
+        } else {
+            pathLog = GetDataDir() / AUDIT_FILENAME;
+        }
+        FILE* file = fopen(pathLog.string().c_str(), "r");
+        if (file && boost::filesystem::file_size(pathLog) > LOG_SHRINKSIZE) {
+            // Restart the file with some of the end
+            char* pch = new char[LOG_BUFFERSIZE];
+            if (NULL != pch) {
+                fseek(file, -LOG_BUFFERSIZE, SEEK_END);
+                int nBytes = fread(pch, 1, LOG_BUFFERSIZE, file);
                 fclose(file);
                 file = NULL;
+
+                file = fopen(pathLog.string().c_str(), "w");
+                if (file) {
+                    fwrite(pch, 1, nBytes, file);
+                    fclose(file);
+                    file = NULL;
+                }
+                delete[] pch;
             }
-            delete[] pch;
+        } else if (NULL != file) {
+            fclose(file);
+            file = NULL;
         }
-    } else if (NULL != file) {
-        fclose(file);
-        file = NULL;
     }
 }
 

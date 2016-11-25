@@ -191,8 +191,8 @@ int DEx_offerCreate(const std::string& addressSeller, uint32_t propertyId, int64
     // -------------------------------------------------------------------------
 
     if (amountOffered > 0) {
-        assert(update_tally_map(addressSeller, propertyId, -amountOffered, BALANCE));
-        assert(update_tally_map(addressSeller, propertyId, amountOffered, SELLOFFER_RESERVE));
+        assert(update_tally_map(addressSeller, propertyId, -amountOffered, BALANCE, txid, "DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+        assert(update_tally_map(addressSeller, propertyId, amountOffered, SELLOFFER_RESERVE, txid, "DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
         CMPOffer sellOffer(block, amountOffered, propertyId, amountDesired, minAcceptFee, paymentWindow, txid);
         my_offers.insert(std::make_pair(key, sellOffer));
@@ -220,8 +220,8 @@ int DEx_offerDestroy(const std::string& addressSeller, uint32_t propertyId)
 
     // return the remaining reserved amount back to the seller
     if (amountReserved > 0) {
-        assert(update_tally_map(addressSeller, propertyId, -amountReserved, SELLOFFER_RESERVE));
-        assert(update_tally_map(addressSeller, propertyId, amountReserved, BALANCE));
+        assert(update_tally_map(addressSeller, propertyId, -amountReserved, SELLOFFER_RESERVE, 0, "Erase DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+        assert(update_tally_map(addressSeller, propertyId, amountReserved, BALANCE, 0, "Erase DEx Sell", strprintf("%s line %d",__FUNCTION__,__LINE__)));
     }
 
     // delete the offer
@@ -307,8 +307,8 @@ int DEx_acceptCreate(const std::string& addressBuyer, const std::string& address
     }
 
     if (amountReserved > 0) {
-        assert(update_tally_map(addressSeller, propertyId, -amountReserved, SELLOFFER_RESERVE));
-        assert(update_tally_map(addressSeller, propertyId, amountReserved, ACCEPT_RESERVE));
+        assert(update_tally_map(addressSeller, propertyId, -amountReserved, SELLOFFER_RESERVE, 0, "DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+        assert(update_tally_map(addressSeller, propertyId, amountReserved, ACCEPT_RESERVE, 0, "DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
         CMPAccept acceptOffer(amountReserved, block, offer.getBlockTimeLimit(), offer.getProperty(), offer.getOfferAmountOriginal(), offer.getBTCDesiredOriginal(), offer.getHash());
         my_accepts.insert(std::make_pair(keyAcceptOrder, acceptOffer));
@@ -361,11 +361,11 @@ int DEx_acceptDestroy(const std::string& addressBuyer, const std::string& addres
 
     if (amountRemaining > 0) {
         if (fReturnToMoney) {
-            assert(update_tally_map(addressSeller, propertyid, -amountRemaining, ACCEPT_RESERVE));
-            assert(update_tally_map(addressSeller, propertyid, amountRemaining, BALANCE));
+            assert(update_tally_map(addressSeller, propertyid, -amountRemaining, ACCEPT_RESERVE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(addressSeller, propertyid, amountRemaining, BALANCE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)));
         } else {
-            assert(update_tally_map(addressSeller, propertyid, -amountRemaining, ACCEPT_RESERVE));
-            assert(update_tally_map(addressSeller, propertyid, amountRemaining, SELLOFFER_RESERVE));
+            assert(update_tally_map(addressSeller, propertyid, -amountRemaining, ACCEPT_RESERVE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(addressSeller, propertyid, amountRemaining, SELLOFFER_RESERVE, 0, "Erase DEx Accept", strprintf("%s line %d",__FUNCTION__,__LINE__)));
         }
     }
 
@@ -510,8 +510,8 @@ int DEx_payment(const uint256& txid, unsigned int vout, const std::string& addre
         PrintToLog("%s: buyer %s pays %s BTC to purchase %s %s\n", __func__,
                 addressBuyer, FormatDivisibleMP(amountPaid), FormatDivisibleMP(amountPurchased), strMPProperty(propertyId));
 
-        assert(update_tally_map(addressSeller, propertyId, -amountPurchased, ACCEPT_RESERVE));
-        assert(update_tally_map(addressBuyer, propertyId, amountPurchased, BALANCE));
+        assert(update_tally_map(addressSeller, propertyId, -amountPurchased, ACCEPT_RESERVE, txid, "DEx Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+        assert(update_tally_map(addressBuyer, propertyId, amountPurchased, BALANCE, txid, "DEx Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)));
 
         bool valid = true;
         p_txlistdb->recordPaymentTX(txid, valid, block, vout, propertyId, amountPurchased, addressBuyer, addressSeller);

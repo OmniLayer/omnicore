@@ -1,5 +1,6 @@
 OMNICORE_H = \
   omnicore/activation.h \
+  omnicore/auditor.h \
   omnicore/consensushash.h \
   omnicore/convert.h \
   omnicore/createpayload.h \
@@ -40,6 +41,7 @@ OMNICORE_H = \
 
 OMNICORE_CPP = \
   omnicore/activation.cpp \
+  omnicore/auditor.cpp \
   omnicore/consensushash.cpp \
   omnicore/convert.cpp \
   omnicore/createpayload.cpp \

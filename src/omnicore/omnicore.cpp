@@ -7,6 +7,7 @@
 #include "omnicore/omnicore.h"
 
 #include "omnicore/activation.h"
+#include "omnicore/auditor.h"
 #include "omnicore/consensushash.h"
 #include "omnicore/convert.h"
 #include "omnicore/dex.h"
@@ -360,17 +361,20 @@ int64_t mastercore::getTotalTokens(uint32_t propertyId, int64_t* n_owners_total)
 }
 
 // return true if everything is ok
-bool mastercore::update_tally_map(const std::string& who, uint32_t propertyId, int64_t amount, TallyType ttype)
+bool mastercore::update_tally_map(const std::string& who, uint32_t propertyId, int64_t amount, TallyType ttype, uint256 txid, const std::string& updateReason, const std::string& caller)
 {
     if (0 == amount) {
         PrintToLog("%s(%s, %u=0x%X, %+d, ttype=%d) ERROR: amount to credit or debit is zero\n", __func__, who, propertyId, propertyId, amount, ttype);
+        if (auditorEnabled && auditBalanceChanges) {
+            Auditor_NotifyBalanceChangeRequested(who, amount, propertyId, ttype, updateReason, txid, caller, false);
+        }
         return false;
     }
     if (ttype >= TALLY_TYPE_COUNT) {
         PrintToLog("%s(%s, %u=0x%X, %+d, ttype=%d) ERROR: invalid tally type\n", __func__, who, propertyId, propertyId, amount, ttype);
         return false;
     }
-    
+
     bool bRet = false;
     int64_t before = 0;
     int64_t after = 0;
@@ -395,6 +399,15 @@ bool mastercore::update_tally_map(const std::string& who, uint32_t propertyId, i
     }
     if (msc_debug_tally && (exodus_address != who || msc_debug_exo)) {
         PrintToLog("%s(%s, %u=0x%X, %+d, ttype=%d): before=%d, after=%d\n", __func__, who, propertyId, propertyId, amount, ttype, before, after);
+    }
+
+    // Notify the auditor a balance change was requested and the result
+    if ((auditorEnabled) && (auditBalanceChanges)) {
+        if (!bRet) {
+            Auditor_NotifyBalanceChangeRequested(who, amount, propertyId, ttype, updateReason, txid, caller, false);
+        } else {
+            Auditor_NotifyBalanceChangeRequested(who, amount, propertyId, ttype, updateReason, txid, caller, true);
+        }
     }
 
     return bRet;
@@ -454,7 +467,7 @@ static int64_t calculate_and_update_devmsc(unsigned int nTime)
     }
 
     if (exodus_delta > 0) {
-        update_tally_map(exodus_address, OMNI_PROPERTY_MSC, exodus_delta, BALANCE);
+        update_tally_map(exodus_address, OMNI_PROPERTY_MSC, exodus_delta, BALANCE, 0, "Award Dev OMNI", strprintf("%s line %d",__FUNCTION__,__LINE__));
         exodus_prev = devmsc;
     }
 
@@ -531,8 +544,13 @@ static bool TXExodusFundraiser(const CTransaction& tx, const std::string& sender
         if (amountGenerated > 0) {
             PrintToLog("Exodus Fundraiser tx detected, tx %s generated %s\n", tx.GetHash().ToString(), FormatDivisibleMP(amountGenerated));
 
-            assert(update_tally_map(sender, OMNI_PROPERTY_MSC, amountGenerated, BALANCE));
-            assert(update_tally_map(sender, OMNI_PROPERTY_TMSC, amountGenerated, BALANCE));
+            assert(update_tally_map(sender, OMNI_PROPERTY_MSC, amountGenerated, BALANCE, tx.GetHash(), "Exodus Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+            assert(update_tally_map(sender, OMNI_PROPERTY_TMSC, amountGenerated, BALANCE, tx.GetHash(), "Exodus Crowdsale Purchase", strprintf("%s line %d",__FUNCTION__,__LINE__)));
+
+            if (auditorEnabled) {
+                Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, OMNI_PROPERTY_MSC, amountGenerated, "Exodus Crowdsale (txid: " + tx.GetHash().ToString() + ")");
+                Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, OMNI_PROPERTY_TMSC, amountGenerated, "Exodus Crowdsale (txid: " + tx.GetHash().ToString() + ")");
+            }
 
             return true;
         }
@@ -1362,10 +1380,10 @@ int input_msc_balances_string(const std::string& s)
         int64_t acceptReserved = boost::lexical_cast<int64_t>(curBalance[2]);
         int64_t metadexReserved = boost::lexical_cast<int64_t>(curBalance[3]);
 
-        if (balance) update_tally_map(strAddress, propertyId, balance, BALANCE);
-        if (sellReserved) update_tally_map(strAddress, propertyId, sellReserved, SELLOFFER_RESERVE);
-        if (acceptReserved) update_tally_map(strAddress, propertyId, acceptReserved, ACCEPT_RESERVE);
-        if (metadexReserved) update_tally_map(strAddress, propertyId, metadexReserved, METADEX_RESERVE);
+        if (balance) update_tally_map(strAddress, propertyId, balance, BALANCE, 0, "Load balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
+        if (sellReserved) update_tally_map(strAddress, propertyId, sellReserved, SELLOFFER_RESERVE, 0, "Load sell offer balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
+        if (acceptReserved) update_tally_map(strAddress, propertyId, acceptReserved, ACCEPT_RESERVE, 0, "Load accept reserved balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
+        if (metadexReserved) update_tally_map(strAddress, propertyId, metadexReserved, METADEX_RESERVE, 0, "Load MetaDEx reserved balances", strprintf("%s line %d",__FUNCTION__,__LINE__));
     }
 
     return 0;
@@ -2171,6 +2189,14 @@ int mastercore_init()
     if (msc_debug_exo) {
         int64_t exodus_balance = getMPbalance(exodus_address, OMNI_PROPERTY_MSC, BALANCE);
         PrintToLog("Exodus balance at start: %s\n", FormatDivisibleMP(exodus_balance));
+    }
+
+    // determine whether we should enable the auditor (default disabled) and initialize it
+    if (GetBoolArg("-enableauditor", false)) auditorEnabled = true;
+    if (GetBoolArg("-auditbalancechanges", false)) auditBalanceChanges = true;
+    if (GetBoolArg("-auditdevomni", false)) auditDevOmni = true;
+    if (auditorEnabled) {
+        Auditor_Initialize();
     }
 
     // load feature activation messages from txlistdb and process them accordingly
@@ -3669,11 +3695,17 @@ int mastercore_handler_block_begin(int nBlockPrev, CBlockIndex const * pBlockInd
         CheckWalletUpdate(true);
         uiInterface.OmniStateInvalidated();
 
+        // notify the auditor of a reorg
+        if (auditorEnabled) Auditor_NotifyChainReorg(nWaterlineBlock);
+
         if (nWaterlineBlock < nBlockPrev) {
             // scan from the block after the best active block to catch up to the active chain
             msc_initial_scan(nWaterlineBlock + 1);
         }
     }
+
+    // notify the auditor we're about to start processing a block
+    if (auditorEnabled) Auditor_NotifyBlockStart(pBlockIndex);
 
     // handle any features that go live with this block
     CheckLiveActivations(pBlockIndex->nHeight);
@@ -3711,6 +3743,8 @@ int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex,
     // calculate devmsc as of this block and update the Exodus' balance
     devmsc = calculate_and_update_devmsc(pBlockIndex->GetBlockTime());
 
+    // notify the auditor that the total number of tokens has changed
+    if ((devmsc > 0) && (auditorEnabled)) Auditor_NotifyPropertyTotalChanged(OMNI_AUDITOR_INCREASE, OMNI_PROPERTY_MSC, devmsc, strprintf("Dev OMNI award (block: %d)", nBlockNow));
     if (msc_debug_exo) {
         int64_t balance = getMPbalance(exodus_address, OMNI_PROPERTY_MSC, BALANCE);
         PrintToLog("devmsc for block %d: %d, Exodus balance: %d\n", nBlockNow, devmsc, FormatDivisibleMP(balance));
@@ -3743,6 +3777,11 @@ int mastercore_handler_block_end(int nBlockNow, CBlockIndex const * pBlockIndex,
         if (writePersistence(nBlockNow)) {
             mastercore_save_state(pBlockIndex);
         }
+    }
+
+    // notify the auditor we've finished processing a block
+    if (auditorEnabled) {
+        Auditor_NotifyBlockFinish(pBlockIndex);
     }
 
     return 0;

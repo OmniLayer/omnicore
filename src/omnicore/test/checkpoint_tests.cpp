@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(verify_checkpoints)
     BOOST_CHECK(!VerifyCheckpoint(0, uint256("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce260")));
 
     // Pollute the state (and therefore hash)
-    BOOST_CHECK(update_tally_map("3CwZ7FiQ4MqBenRdCkjjc41M5bnoKQGC2b", 1, 12345, BALANCE));
+    BOOST_CHECK(update_tally_map("3CwZ7FiQ4MqBenRdCkjjc41M5bnoKQGC2b", 1, 12345, BALANCE, 0, "Test Balance Update", "BOOST TEST"));
     // Checkpoint mismatch, due to the state pollution
     BOOST_CHECK(!VerifyCheckpoint(0, uint256("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")));
 
