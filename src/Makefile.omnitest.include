@@ -10,6 +10,7 @@ OMNICORE_TEST_CPP = \
   omnicore/test/dex_purchase_tests.cpp \
   omnicore/test/encoding_b_tests.cpp \
   omnicore/test/encoding_c_tests.cpp \
+  omnicore/test/encoding_d_tests.cpp \
   omnicore/test/exodus_tests.cpp \
   omnicore/test/lock_tests.cpp \
   omnicore/test/marker_tests.cpp \

@@ -50,6 +50,7 @@ int const MAX_STATE_HISTORY = 50;
 #define OMNI_CLASS_A 1
 #define OMNI_CLASS_B 2
 #define OMNI_CLASS_C 3
+#define OMNI_CLASS_D 4
 
 // Omni Layer Transaction (Packet) Version
 #define MP_TX_PKT_V0  0
@@ -143,8 +144,8 @@ const CBitcoinAddress ExodusAddress();
 /** Returns the Exodus crowdsale address. */
 const CBitcoinAddress ExodusCrowdsaleAddress(int nBlock = 0);
 
-/** Returns the marker for class C transactions. */
-const std::vector<unsigned char> GetOmMarker();
+/** Returns the marker for class C & D transactions. */
+const std::vector<unsigned char> GetOmMarker(int txClass);
 
 //! Used to indicate, whether to automatically commit created transactions
 extern bool autoCommit;
@@ -333,7 +334,8 @@ bool isMPinBlockRange(int starting_block, int ending_block, bool bDeleteFound);
 std::string FormatIndivisibleMP(int64_t n);
 
 int WalletTxBuilder(const std::string& senderAddress, const std::string& receiverAddress, const std::string& redemptionAddress,
-                 int64_t referenceAmount, const std::vector<unsigned char>& data, uint256& txid, std::string& rawHex, bool commit, unsigned int minInputs = 1);
+                 int64_t referenceAmount, const std::vector<unsigned char>& data, const std::vector<unsigned char>& compressedData,
+                 uint256& txid, std::string& rawHex, bool commit, unsigned int minInputs = 1);
 
 bool isTestEcosystemProperty(uint32_t propertyId);
 bool isMainEcosystemProperty(uint32_t propertyId);
@@ -348,8 +350,9 @@ std::string strTransactionType(uint16_t txType);
 /** Returns the encoding class, used to embed a payload. */
 int GetEncodingClass(const CTransaction& tx, int nBlock);
 
-/** Determines, whether it is valid to use a Class C transaction for a given payload size. */
+/** Determines, whether it is valid to use a Class C or D transaction for a given payload size. */
 bool UseEncodingClassC(size_t nDataSize);
+bool UseEncodingClassD(size_t nDataSize);
 
 bool getValidMPTX(const uint256 &txid, int *block = NULL, unsigned int *type = NULL, uint64_t *nAmended = NULL);
 

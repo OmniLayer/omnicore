@@ -56,7 +56,7 @@ static CTransaction TxClassC(const std::vector<CTxOut>& txInputs)
     // Outputs:
     std::vector<std::pair<CScript, int64_t> > txOutputs;
     std::vector<unsigned char> vchPayload = CreatePayload_SimpleSend(1, 1000);
-    BOOST_CHECK(OmniCore_Encode_ClassC(vchPayload, txOutputs));
+    BOOST_CHECK(OmniCore_Encode_ClassCD(vchPayload, txOutputs, OMNI_CLASS_C));
 
     for (std::vector<std::pair<CScript, int64_t> >::const_iterator it = txOutputs.begin(); it != txOutputs.end(); ++it)
     {

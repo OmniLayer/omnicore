@@ -1,6 +1,7 @@
 #include "omnicore/createtx.h"
 
 #include "omnicore/encoding.h"
+#include "omnicore/omnicore.h"
 #include "omnicore/script.h"
 
 #include "base58.h"
@@ -145,7 +146,7 @@ OmniTxBuilder& OmniTxBuilder::addOpReturn(const std::vector<unsigned char>& data
 {
     std::vector<std::pair<CScript, int64_t> > outputs;
 
-    if (!OmniCore_Encode_ClassC(data, outputs)) {
+    if (!OmniCore_Encode_ClassCD(data, outputs, OMNI_CLASS_C)) {
         return *this;
     }
 

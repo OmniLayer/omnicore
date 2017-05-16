@@ -13,6 +13,7 @@
 #include "omnicore/rules.h"
 #include "omnicore/sp.h"
 #include "omnicore/sto.h"
+#include "omnicore/varint.h"
 
 #include "amount.h"
 #include "main.h"
@@ -78,9 +79,30 @@ static std::string intToClass(int encodingClass)
             return "B";
         case OMNI_CLASS_C:
             return "C";
+        case OMNI_CLASS_D:
+            return "D";
     }
 
     return "-";
+}
+
+/** Obtains the next varint from a payload. */
+std::vector<uint8_t> CMPTransaction::GetNextVarIntBytes(int &i) {
+    std::vector<uint8_t> vecBytes;
+
+    if (i >= pkt_size) {
+        return vecBytes;
+    }
+
+    do {
+        vecBytes.push_back(pkt[i]);
+        if (!IsMSBSet(&pkt[i])) break;
+        i++;
+    } while (i < pkt_size);
+
+    i++;
+
+    return vecBytes;
 }
 
 /** Checks whether a pointer to the payload is past it's last position. */
@@ -165,22 +187,38 @@ bool CMPTransaction::interpret_Transaction()
 /** Version and type */
 bool CMPTransaction::interpret_TransactionType()
 {
-    if (pkt_size < 4) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+
+        if (vecVersionBytes.empty() || vecTypeBytes.empty()) {
+            return false;
+        }
+
+        version = DecompressInteger(vecVersionBytes);
+        type = DecompressInteger(vecTypeBytes);
+    } else {
+        if (pkt_size < 4) {
+            return false;
+        }
+
+        uint16_t txVersion = 0;
+        uint16_t txType = 0;
+
+        memcpy(&txVersion, &pkt[0], 2);
+        swapByteOrder16(txVersion);
+        memcpy(&txType, &pkt[2], 2);
+        swapByteOrder16(txType);
+        version = txVersion;
+        type = txType;
     }
-    uint16_t txVersion = 0;
-    uint16_t txType = 0;
-    memcpy(&txVersion, &pkt[0], 2);
-    swapByteOrder16(txVersion);
-    memcpy(&txType, &pkt[2], 2);
-    swapByteOrder16(txType);
-    version = txVersion;
-    type = txType;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t------------------------------\n");
-        PrintToLog("\t         version: %d, class %s\n", txVersion, intToClass(encodingClass));
-        PrintToLog("\t            type: %d (%s)\n", txType, strTransactionType(txType));
+        PrintToLog("\t         version: %d, class %s\n", version, intToClass(encodingClass));
+        PrintToLog("\t            type: %d (%s)\n", type, strTransactionType(type));
     }
 
     return true;
@@ -189,14 +227,32 @@ bool CMPTransaction::interpret_TransactionType()
 /** Tx 1 */
 bool CMPTransaction::interpret_SimpleSend()
 {
-    if (pkt_size < 16) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+    } else {
+        if (pkt_size < 16) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));
@@ -209,18 +265,45 @@ bool CMPTransaction::interpret_SimpleSend()
 /** Tx 3 */
 bool CMPTransaction::interpret_SendToOwners()
 {
-    int expectedSize = (version == MP_TX_PKT_V0) ? 16 : 20;
-    if (pkt_size < expectedSize) {
-        return false;
-    }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
-    if (version > MP_TX_PKT_V0) {
-        memcpy(&distribution_property, &pkt[16], 4);
-        swapByteOrder32(distribution_property);
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+
+        if (version > MP_TX_PKT_V0) {
+            std::vector<uint8_t> vecDistributionPropertyBytes = GetNextVarIntBytes(i);
+            if (vecDistributionPropertyBytes.empty()) {
+                return false;
+            }
+            distribution_property = DecompressInteger(vecDistributionPropertyBytes);
+        }
+    } else {
+        int expectedSize = (version == MP_TX_PKT_V0) ? 16 : 20;
+        if (pkt_size < expectedSize) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
+
+        if (version > MP_TX_PKT_V0) {
+            memcpy(&distribution_property, &pkt[16], 4);
+            swapByteOrder32(distribution_property);
+        }
     }
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
@@ -237,10 +320,24 @@ bool CMPTransaction::interpret_SendToOwners()
 /** Tx 4 */
 bool CMPTransaction::interpret_SendAll()
 {
-    if (pkt_size < 5) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[i], 1);
+    } else {
+        if (pkt_size < 5) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[4], 1);
     }
-    memcpy(&ecosystem, &pkt[4], 1);
 
     property = ecosystem; // provide a hint for the UI, TODO: better handling!
 
@@ -254,23 +351,64 @@ bool CMPTransaction::interpret_SendAll()
 /** Tx 20 */
 bool CMPTransaction::interpret_TradeOffer()
 {
-    int expectedSize = (version == MP_TX_PKT_V0) ? 33 : 34;
-    if (pkt_size < expectedSize) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountDesiredBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&blocktimelimit, &pkt[i], 1);
+        i++;
+
+        std::vector<uint8_t> vecMinFeeBytes = GetNextVarIntBytes(i);
+
+        if (version > MP_TX_PKT_V0) {
+            if (i >= pkt_size) {
+                return false;
+            }
+
+            memcpy(&subaction, &pkt[i], 1);
+            i++;
+        }
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty() || vecAmountDesiredBytes.empty() || vecMinFeeBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+        amount_desired = DecompressInteger(vecAmountDesiredBytes);
+        min_fee = DecompressInteger(vecMinFeeBytes);
+    } else {
+        int expectedSize = (version == MP_TX_PKT_V0) ? 33 : 34;
+        if (pkt_size < expectedSize) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
+        memcpy(&amount_desired, &pkt[16], 8);
+        memcpy(&blocktimelimit, &pkt[24], 1);
+        memcpy(&min_fee, &pkt[25], 8);
+
+        if (version > MP_TX_PKT_V0) {
+            memcpy(&subaction, &pkt[33], 1);
+        }
+
+        swapByteOrder64(amount_desired);
+        swapByteOrder64(min_fee);
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
-    memcpy(&amount_desired, &pkt[16], 8);
-    memcpy(&blocktimelimit, &pkt[24], 1);
-    memcpy(&min_fee, &pkt[25], 8);
-    if (version > MP_TX_PKT_V0) {
-        memcpy(&subaction, &pkt[33], 1);
-    }
-    swapByteOrder64(amount_desired);
-    swapByteOrder64(min_fee);
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));
@@ -289,14 +427,32 @@ bool CMPTransaction::interpret_TradeOffer()
 /** Tx 22 */
 bool CMPTransaction::interpret_AcceptOfferBTC()
 {
-    if (pkt_size < 16) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+    } else {
+        if (pkt_size < 16) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));
@@ -309,18 +465,40 @@ bool CMPTransaction::interpret_AcceptOfferBTC()
 /** Tx 25 */
 bool CMPTransaction::interpret_MetaDExTrade()
 {
-    if (pkt_size < 28) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdDesiredBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountDesiredBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty() || vecPropIdDesiredBytes.empty() || vecAmountDesiredBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+        desired_property = DecompressInteger(vecPropIdDesiredBytes);
+        desired_value = DecompressInteger(vecAmountDesiredBytes);
+    } else {
+        if (pkt_size < 28) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
+        memcpy(&desired_property, &pkt[16], 4);
+        swapByteOrder32(desired_property);
+        memcpy(&desired_value, &pkt[20], 8);
+        swapByteOrder64(desired_value);
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
-    memcpy(&desired_property, &pkt[16], 4);
-    swapByteOrder32(desired_property);
-    memcpy(&desired_value, &pkt[20], 8);
-    swapByteOrder64(desired_value);
 
     action = CMPTransaction::ADD; // depreciated
 
@@ -337,18 +515,40 @@ bool CMPTransaction::interpret_MetaDExTrade()
 /** Tx 26 */
 bool CMPTransaction::interpret_MetaDExCancelPrice()
 {
-    if (pkt_size < 28) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdDesiredBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountDesiredBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty() || vecPropIdDesiredBytes.empty() || vecAmountDesiredBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+        desired_property = DecompressInteger(vecPropIdDesiredBytes);
+        desired_value = DecompressInteger(vecAmountDesiredBytes);
+    } else {
+        if (pkt_size < 28) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
+        memcpy(&desired_property, &pkt[16], 4);
+        swapByteOrder32(desired_property);
+        memcpy(&desired_value, &pkt[20], 8);
+        swapByteOrder64(desired_value);
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
-    memcpy(&desired_property, &pkt[16], 4);
-    swapByteOrder32(desired_property);
-    memcpy(&desired_value, &pkt[20], 8);
-    swapByteOrder64(desired_value);
 
     action = CMPTransaction::CANCEL_AT_PRICE; // depreciated
 
@@ -365,13 +565,30 @@ bool CMPTransaction::interpret_MetaDExCancelPrice()
 /** Tx 27 */
 bool CMPTransaction::interpret_MetaDExCancelPair()
 {
-    if (pkt_size < 12) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdDesiredBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecPropIdDesiredBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        desired_property = DecompressInteger(vecPropIdDesiredBytes);
+    } else {
+        if (pkt_size < 12) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&desired_property, &pkt[8], 4);
+        swapByteOrder32(desired_property);
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&desired_property, &pkt[8], 4);
-    swapByteOrder32(desired_property);
 
     nValue = 0; // depreciated
     nNewValue = nValue; // depreciated
@@ -389,10 +606,24 @@ bool CMPTransaction::interpret_MetaDExCancelPair()
 /** Tx 28 */
 bool CMPTransaction::interpret_MetaDExCancelEcosystem()
 {
-    if (pkt_size < 5) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[i], 1);
+    } else {
+        if (pkt_size < 5) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[4], 1);
     }
-    memcpy(&ecosystem, &pkt[4], 1);
 
     property = ecosystem; // depreciated
     desired_property = ecosystem; // depreciated
@@ -411,30 +642,88 @@ bool CMPTransaction::interpret_MetaDExCancelEcosystem()
 /** Tx 50 */
 bool CMPTransaction::interpret_CreatePropertyFixed()
 {
-    if (pkt_size < 25) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[i], 1);
+        i++;
+
+        std::vector<uint8_t> vecPropTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPrevPropIdBytes = GetNextVarIntBytes(i);
+
+        const char* p = i + (char*) &pkt;
+        std::vector<std::string> spstr;
+        for (int j = 0; j < 5; j++) {
+            spstr.push_back(std::string(p));
+            p += spstr.back().size() + 1;
+        }
+
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
+
+        int j = 0;
+        memcpy(category, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(category)-1)); j++;
+        memcpy(subcategory, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(subcategory)-1)); j++;
+        memcpy(name, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(name)-1)); j++;
+        memcpy(url, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(url)-1)); j++;
+        memcpy(data, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(data)-1)); j++;
+        i = i + strlen(category) + strlen(subcategory) + strlen(name) + strlen(url) + strlen(data) + 5; // data sizes + 5 null terminators
+
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+
+        if (vecPropTypeBytes.empty() || vecPrevPropIdBytes.empty() || vecAmountBytes.empty()) {
+            return false;
+        }
+
+        prop_type = DecompressInteger(vecPropTypeBytes);
+        prev_prop_id = DecompressInteger(vecPrevPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+    } else {
+        if (pkt_size < 25) {
+            return false;
+        }
+
+        const char* p = 11 + (char*) &pkt;
+        std::vector<std::string> spstr;
+
+        memcpy(&ecosystem, &pkt[4], 1);
+        memcpy(&prop_type, &pkt[5], 2);
+        swapByteOrder16(prop_type);
+        memcpy(&prev_prop_id, &pkt[7], 4);
+        swapByteOrder32(prev_prop_id);
+
+        for (int i = 0; i < 5; i++) {
+            spstr.push_back(std::string(p));
+            p += spstr.back().size() + 1;
+        }
+
+        int i = 0;
+        memcpy(category, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(category)-1)); i++;
+        memcpy(subcategory, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(subcategory)-1)); i++;
+        memcpy(name, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(name)-1)); i++;
+        memcpy(url, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(url)-1)); i++;
+        memcpy(data, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(data)-1)); i++;
+
+        memcpy(&nValue, p, 8);
+        swapByteOrder64(nValue);
+        p += 8;
+        nNewValue = nValue;
+
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
     }
-    const char* p = 11 + (char*) &pkt;
-    std::vector<std::string> spstr;
-    memcpy(&ecosystem, &pkt[4], 1);
-    memcpy(&prop_type, &pkt[5], 2);
-    swapByteOrder16(prop_type);
-    memcpy(&prev_prop_id, &pkt[7], 4);
-    swapByteOrder32(prev_prop_id);
-    for (int i = 0; i < 5; i++) {
-        spstr.push_back(std::string(p));
-        p += spstr.back().size() + 1;
-    }
-    int i = 0;
-    memcpy(category, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(category)-1)); i++;
-    memcpy(subcategory, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(subcategory)-1)); i++;
-    memcpy(name, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(name)-1)); i++;
-    memcpy(url, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(url)-1)); i++;
-    memcpy(data, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(data)-1)); i++;
-    memcpy(&nValue, p, 8);
-    swapByteOrder64(nValue);
-    p += 8;
-    nNewValue = nValue;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t       ecosystem: %d\n", ecosystem);
@@ -448,49 +737,120 @@ bool CMPTransaction::interpret_CreatePropertyFixed()
         PrintToLog("\t           value: %s\n", FormatByType(nValue, prop_type));
     }
 
-    if (isOverrun(p)) {
-        PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
-        return false;
-    }
-
     return true;
 }
 
 /** Tx 51 */
 bool CMPTransaction::interpret_CreatePropertyVariable()
 {
-    if (pkt_size < 39) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[i], 1);
+        i++;
+
+        std::vector<uint8_t> vecPropTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPrevPropIdBytes = GetNextVarIntBytes(i);
+
+        const char* p = i + (char*) &pkt;
+        std::vector<std::string> spstr;
+
+        for (int j = 0; j < 5; j++) {
+            spstr.push_back(std::string(p));
+            p += spstr.back().size() + 1;
+        }
+
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
+
+        int j = 0;
+        memcpy(category, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(category)-1)); j++;
+        memcpy(subcategory, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(subcategory)-1)); j++;
+        memcpy(name, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(name)-1)); j++;
+        memcpy(url, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(url)-1)); j++;
+        memcpy(data, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(data)-1)); j++;
+        i = i + strlen(category) + strlen(subcategory) + strlen(name) + strlen(url) + strlen(data) + 5; // data sizes + 5 null terminators
+
+        std::vector<uint8_t> vecPropertyIdDesiredBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountPerUnitBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecDeadlineBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&early_bird, &pkt[i], 1);
+        i++;
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&percentage, &pkt[i], 1);
+        i++;
+
+        if (vecPropTypeBytes.empty() || vecPrevPropIdBytes.empty() || vecPropertyIdDesiredBytes.empty() || vecAmountPerUnitBytes.empty() || vecDeadlineBytes.empty()) {
+            return false;
+        }
+
+        prop_type = DecompressInteger(vecPropTypeBytes);
+        prev_prop_id = DecompressInteger(vecPrevPropIdBytes);
+        property = DecompressInteger(vecPropertyIdDesiredBytes);
+        nValue = DecompressInteger(vecAmountPerUnitBytes);
+        nNewValue = nValue;
+        deadline = DecompressInteger(vecDeadlineBytes);
+    } else {
+        if (pkt_size < 39) {
+            return false;
+        }
+
+        const char* p = 11 + (char*) &pkt;
+        std::vector<std::string> spstr;
+
+        memcpy(&ecosystem, &pkt[4], 1);
+        memcpy(&prop_type, &pkt[5], 2);
+        swapByteOrder16(prop_type);
+        memcpy(&prev_prop_id, &pkt[7], 4);
+        swapByteOrder32(prev_prop_id);
+
+        for (int i = 0; i < 5; i++) {
+            spstr.push_back(std::string(p));
+            p += spstr.back().size() + 1;
+        }
+
+        int i = 0;
+        memcpy(category, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(category)-1)); i++;
+        memcpy(subcategory, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(subcategory)-1)); i++;
+        memcpy(name, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(name)-1)); i++;
+        memcpy(url, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(url)-1)); i++;
+        memcpy(data, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(data)-1)); i++;
+
+        memcpy(&property, p, 4);
+        swapByteOrder32(property);
+        p += 4;
+        memcpy(&nValue, p, 8);
+        swapByteOrder64(nValue);
+        p += 8;
+        nNewValue = nValue;
+        memcpy(&deadline, p, 8);
+        swapByteOrder64(deadline);
+        p += 8;
+        memcpy(&early_bird, p++, 1);
+        memcpy(&percentage, p++, 1);
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
     }
-    const char* p = 11 + (char*) &pkt;
-    std::vector<std::string> spstr;
-    memcpy(&ecosystem, &pkt[4], 1);
-    memcpy(&prop_type, &pkt[5], 2);
-    swapByteOrder16(prop_type);
-    memcpy(&prev_prop_id, &pkt[7], 4);
-    swapByteOrder32(prev_prop_id);
-    for (int i = 0; i < 5; i++) {
-        spstr.push_back(std::string(p));
-        p += spstr.back().size() + 1;
-    }
-    int i = 0;
-    memcpy(category, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(category)-1)); i++;
-    memcpy(subcategory, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(subcategory)-1)); i++;
-    memcpy(name, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(name)-1)); i++;
-    memcpy(url, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(url)-1)); i++;
-    memcpy(data, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(data)-1)); i++;
-    memcpy(&property, p, 4);
-    swapByteOrder32(property);
-    p += 4;
-    memcpy(&nValue, p, 8);
-    swapByteOrder64(nValue);
-    p += 8;
-    nNewValue = nValue;
-    memcpy(&deadline, p, 8);
-    swapByteOrder64(deadline);
-    p += 8;
-    memcpy(&early_bird, p++, 1);
-    memcpy(&percentage, p++, 1);
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t       ecosystem: %d\n", ecosystem);
@@ -508,22 +868,32 @@ bool CMPTransaction::interpret_CreatePropertyVariable()
         PrintToLog("\t    issuer bonus: %d\n", percentage);
     }
 
-    if (isOverrun(p)) {
-        PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
-        return false;
-    }
-
     return true;
 }
 
 /** Tx 53 */
 bool CMPTransaction::interpret_CloseCrowdsale()
 {
-    if (pkt_size < 8) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+    } else {
+        if (pkt_size < 8) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));
@@ -535,26 +905,78 @@ bool CMPTransaction::interpret_CloseCrowdsale()
 /** Tx 54 */
 bool CMPTransaction::interpret_CreatePropertyManaged()
 {
-    if (pkt_size < 17) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+
+        if (i >= pkt_size) {
+            return false;
+        }
+
+        memcpy(&ecosystem, &pkt[i], 1);
+        i++;
+
+        std::vector<uint8_t> vecPropTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPrevPropIdBytes = GetNextVarIntBytes(i);
+
+        const char* p = i + (char*) &pkt;
+        std::vector<std::string> spstr;
+
+        for (int j = 0; j < 5; j++) {
+            spstr.push_back(std::string(p));
+            p += spstr.back().size() + 1;
+        }
+
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
+
+        int j = 0;
+        memcpy(category, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(category)-1)); j++;
+        memcpy(subcategory, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(subcategory)-1)); j++;
+        memcpy(name, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(name)-1)); j++;
+        memcpy(url, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(url)-1)); j++;
+        memcpy(data, spstr[j].c_str(), std::min(spstr[j].length(), sizeof(data)-1)); j++;
+
+        if (vecPropTypeBytes.empty() || vecPrevPropIdBytes.empty()) {
+            return false;
+        }
+
+        prop_type = DecompressInteger(vecPropTypeBytes);
+        prev_prop_id = DecompressInteger(vecPrevPropIdBytes);
+    } else {
+        if (pkt_size < 17) {
+            return false;
+        }
+
+        const char* p = 11 + (char*) &pkt;
+        std::vector<std::string> spstr;
+
+        memcpy(&ecosystem, &pkt[4], 1);
+        memcpy(&prop_type, &pkt[5], 2);
+        swapByteOrder16(prop_type);
+        memcpy(&prev_prop_id, &pkt[7], 4);
+        swapByteOrder32(prev_prop_id);
+
+        for (int i = 0; i < 5; i++) {
+            spstr.push_back(std::string(p));
+            p += spstr.back().size() + 1;
+        }
+
+        int i = 0;
+        memcpy(category, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(category)-1)); i++;
+        memcpy(subcategory, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(subcategory)-1)); i++;
+        memcpy(name, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(name)-1)); i++;
+        memcpy(url, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(url)-1)); i++;
+        memcpy(data, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(data)-1)); i++;
+
+        if (isOverrun(p)) {
+            PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
+            return false;
+        }
     }
-    const char* p = 11 + (char*) &pkt;
-    std::vector<std::string> spstr;
-    memcpy(&ecosystem, &pkt[4], 1);
-    memcpy(&prop_type, &pkt[5], 2);
-    swapByteOrder16(prop_type);
-    memcpy(&prev_prop_id, &pkt[7], 4);
-    swapByteOrder32(prev_prop_id);
-    for (int i = 0; i < 5; i++) {
-        spstr.push_back(std::string(p));
-        p += spstr.back().size() + 1;
-    }
-    int i = 0;
-    memcpy(category, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(category)-1)); i++;
-    memcpy(subcategory, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(subcategory)-1)); i++;
-    memcpy(name, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(name)-1)); i++;
-    memcpy(url, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(url)-1)); i++;
-    memcpy(data, spstr[i].c_str(), std::min(spstr[i].length(), sizeof(data)-1)); i++;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t       ecosystem: %d\n", ecosystem);
@@ -567,25 +989,38 @@ bool CMPTransaction::interpret_CreatePropertyManaged()
         PrintToLog("\t            data: %s\n", data);
     }
 
-    if (isOverrun(p)) {
-        PrintToLog("%s(): rejected: malformed string value(s)\n", __func__);
-        return false;
-    }
-
     return true;
 }
 
 /** Tx 55 */
 bool CMPTransaction::interpret_GrantTokens()
 {
-    if (pkt_size < 16) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+    } else {
+        if (pkt_size < 16) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));
@@ -598,14 +1033,32 @@ bool CMPTransaction::interpret_GrantTokens()
 /** Tx 56 */
 bool CMPTransaction::interpret_RevokeTokens()
 {
-    if (pkt_size < 16) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecAmountBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty() || vecAmountBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+        nValue = DecompressInteger(vecAmountBytes);
+        nNewValue = nValue;
+    } else {
+        if (pkt_size < 16) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
+        memcpy(&nValue, &pkt[8], 8);
+        swapByteOrder64(nValue);
+        nNewValue = nValue;
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
-    memcpy(&nValue, &pkt[8], 8);
-    swapByteOrder64(nValue);
-    nNewValue = nValue;
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));
@@ -618,11 +1071,26 @@ bool CMPTransaction::interpret_RevokeTokens()
 /** Tx 70 */
 bool CMPTransaction::interpret_ChangeIssuer()
 {
-    if (pkt_size < 8) {
-        return false;
+    if (encodingClass == OMNI_CLASS_D) {
+        int i = 0;
+
+        std::vector<uint8_t> vecVersionBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecTypeBytes = GetNextVarIntBytes(i);
+        std::vector<uint8_t> vecPropIdBytes = GetNextVarIntBytes(i);
+
+        if (vecPropIdBytes.empty()) {
+            return false;
+        }
+
+        property = DecompressInteger(vecPropIdBytes);
+    } else {
+        if (pkt_size < 8) {
+            return false;
+        }
+
+        memcpy(&property, &pkt[4], 4);
+        swapByteOrder32(property);
     }
-    memcpy(&property, &pkt[4], 4);
-    swapByteOrder32(property);
 
     if ((!rpcOnly && msc_debug_packets) || msc_debug_packets_readonly) {
         PrintToLog("\t        property: %d (%s)\n", property, strMPProperty(property));

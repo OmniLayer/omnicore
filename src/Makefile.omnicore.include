@@ -34,6 +34,7 @@ OMNICORE_H = \
   omnicore/uint256_extensions.h \
   omnicore/utils.h \
   omnicore/utilsbitcoin.h \
+  omnicore/varint.h \
   omnicore/version.h \
   omnicore/walletcache.h \
   omnicore/wallettxs.h
@@ -72,6 +73,7 @@ OMNICORE_CPP = \
   omnicore/tx.cpp \
   omnicore/utils.cpp \
   omnicore/utilsbitcoin.cpp \
+  omnicore/varint.cpp \
   omnicore/version.cpp \
   omnicore/walletcache.cpp \
   omnicore/wallettxs.cpp

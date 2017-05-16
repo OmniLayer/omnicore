@@ -536,13 +536,14 @@ void MetaDExDialog::sendTrade()
         return;
     }
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_MetaDExTrade(GetPropForSale(), amountForSale, GetPropDesired(), amountDesired);
+    std::vector<unsigned char> compressedPayload = CreatePayload_MetaDExTrade(GetPropForSale(), amountForSale, GetPropDesired(), amountDesired, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(strFromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(strFromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {

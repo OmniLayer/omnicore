@@ -17,9 +17,9 @@
 // Is resetted to a norm value in each test
 extern unsigned nMaxDatacarrierBytes;
 
-BOOST_FIXTURE_TEST_SUITE(omnicore_encoding_c_tests, BasicTestingSetup)
+BOOST_FIXTURE_TEST_SUITE(omnicore_encoding_d_tests, BasicTestingSetup)
 
-BOOST_AUTO_TEST_CASE(class_c_marker)
+BOOST_AUTO_TEST_CASE(class_d_marker)
 {
     // Store initial data carrier size
     unsigned nMaxDatacarrierBytesOriginal = nMaxDatacarrierBytes;
@@ -28,15 +28,13 @@ BOOST_AUTO_TEST_CASE(class_c_marker)
 
     std::vector<unsigned char> vchMarker;
     vchMarker.push_back(0x6f); // "o"
-    vchMarker.push_back(0x6d); // "m"
-    vchMarker.push_back(0x6e); // "n"
-    vchMarker.push_back(0x69); // "i"
+    vchMarker.push_back(0x6c); // "l"
 
     std::vector<unsigned char> vchPayload = ParseHex(
-        "00000000000000010000000006dac2c0");
+        "000001e807");
 
     std::vector<std::pair<CScript, int64_t> > vecOutputs;
-    BOOST_CHECK(OmniCore_Encode_ClassCD(vchPayload, vecOutputs, OMNI_CLASS_C));
+    BOOST_CHECK(OmniCore_Encode_ClassCD(vchPayload, vecOutputs, OMNI_CLASS_D));
 
     // One output was created
     BOOST_CHECK_EQUAL(vecOutputs.size(), 1);
@@ -73,7 +71,7 @@ BOOST_AUTO_TEST_CASE(class_c_marker)
     nMaxDatacarrierBytes = nMaxDatacarrierBytesOriginal;
 }
 
-BOOST_AUTO_TEST_CASE(class_c_with_empty_payload)
+BOOST_AUTO_TEST_CASE(class_d_with_empty_payload)
 {
     // Store initial data carrier size
     unsigned nMaxDatacarrierBytesOriginal = nMaxDatacarrierBytes;
@@ -85,13 +83,13 @@ BOOST_AUTO_TEST_CASE(class_c_with_empty_payload)
     nMaxDatacarrierBytes = 0; // byte
 
     std::vector<std::pair<CScript, int64_t> > vecOutputs;
-    BOOST_CHECK(!OmniCore_Encode_ClassCD(vchEmptyPayload, vecOutputs, OMNI_CLASS_C));
+    BOOST_CHECK(!OmniCore_Encode_ClassCD(vchEmptyPayload, vecOutputs, OMNI_CLASS_D));
     BOOST_CHECK_EQUAL(vecOutputs.size(), 0);
 
     // Exactly the size of the marker
-    nMaxDatacarrierBytes = 4; // byte
+    nMaxDatacarrierBytes = 2; // byte
 
-    BOOST_CHECK(OmniCore_Encode_ClassCD(vchEmptyPayload, vecOutputs, OMNI_CLASS_C));
+    BOOST_CHECK(OmniCore_Encode_ClassCD(vchEmptyPayload, vecOutputs, OMNI_CLASS_D));
     BOOST_CHECK_EQUAL(vecOutputs.size(), 1);
 
     // Restore original data carrier size settings

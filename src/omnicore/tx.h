@@ -100,6 +100,11 @@ private:
     bool isOverrun(const char* p);
 
     /**
+     * Variable Integers
+     */
+    std::vector<uint8_t> GetNextVarIntBytes(int &i);
+
+    /**
      * Payload parsing
      */
     bool interpret_TransactionType();

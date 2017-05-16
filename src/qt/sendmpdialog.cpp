@@ -313,13 +313,14 @@ void SendMPDialog::sendMPTransaction()
         return; // unlock wallet was cancelled/failed
     }
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_SimpleSend(propertyId, sendAmount);
+    std::vector<unsigned char> compressedPayload = CreatePayload_SimpleSend(propertyId, sendAmount, true);
 
     // request the wallet build the transaction (and if needed commit it) - note UI does not support added reference amounts currently
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress.ToString(), refAddress.ToString(), "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress.ToString(), refAddress.ToString(), "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {

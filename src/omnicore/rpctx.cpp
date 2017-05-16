@@ -58,10 +58,12 @@ UniValue omni_sendrawtx(const UniValue& params, bool fHelp)
     std::string redeemAddress = (params.size() > 3) ? ParseAddressOrEmpty(params[3]): "";
     int64_t referenceAmount = (params.size() > 4) ? ParseAmount(params[4], true): 0;
 
+    std::vector<unsigned char> compressedPayload; // raw tx support remains class C only at the moment
+
     //some sanity checking of the data supplied?
     uint256 newTX;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, data, newTX, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, data, compressedPayload, newTX, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -112,13 +114,14 @@ UniValue omni_send(const UniValue& params, bool fHelp)
     RequireBalance(fromAddress, propertyId, amount);
     RequireSaneReferenceAmount(referenceAmount);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_SimpleSend(propertyId, amount);
+    std::vector<unsigned char> compressedPayload = CreatePayload_SimpleSend(propertyId, amount, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -166,13 +169,14 @@ UniValue omni_sendall(const UniValue& params, bool fHelp)
     // perform checks
     RequireSaneReferenceAmount(referenceAmount);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_SendAll(ecosystem);
+    std::vector<unsigned char> compressedPayload = CreatePayload_SendAll(ecosystem, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -254,13 +258,14 @@ UniValue omni_senddexsell(const UniValue& params, bool fHelp)
         }
     }
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_DExSell(propertyIdForSale, amountForSale, amountDesired, paymentWindow, minAcceptFee, action);
+    std::vector<unsigned char> compressedPayload = CreatePayload_DExSell(propertyIdForSale, amountForSale, amountDesired, paymentWindow, minAcceptFee, action, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -333,13 +338,14 @@ UniValue omni_senddexaccept(const UniValue& params, bool fHelp)
     // fPayAtLeastCustomFee = true;
 #endif
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_DExAccept(propertyId, amount);
+    std::vector<unsigned char> compressedPayload = CreatePayload_DExAccept(propertyId, amount, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, toAddress, "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, toAddress, "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
 #ifdef ENABLE_WALLET
     // set the custom fee back to original
@@ -411,13 +417,14 @@ UniValue omni_sendissuancecrowdsale(const UniValue& params, bool fHelp)
     RequireExistingProperty(propertyIdDesired);
     RequireSameEcosystem(ecosystem, propertyIdDesired);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_IssuanceVariable(ecosystem, type, previousId, category, subcategory, name, url, data, propertyIdDesired, numTokens, deadline, earlyBonus, issuerPercentage);
+    std::vector<unsigned char> compressedPayload = CreatePayload_IssuanceVariable(ecosystem, type, previousId, category, subcategory, name, url, data, propertyIdDesired, numTokens, deadline, earlyBonus, issuerPercentage, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -474,13 +481,14 @@ UniValue omni_sendissuancefixed(const UniValue& params, bool fHelp)
     // perform checks
     RequirePropertyName(name);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_IssuanceFixed(ecosystem, type, previousId, category, subcategory, name, url, data, amount);
+    std::vector<unsigned char> compressedPayload = CreatePayload_IssuanceFixed(ecosystem, type, previousId, category, subcategory, name, url, data, amount, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -535,13 +543,14 @@ UniValue omni_sendissuancemanaged(const UniValue& params, bool fHelp)
     // perform checks
     RequirePropertyName(name);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_IssuanceManaged(ecosystem, type, previousId, category, subcategory, name, url, data);
+    std::vector<unsigned char> compressedPayload = CreatePayload_IssuanceManaged(ecosystem, type, previousId, category, subcategory, name, url, data, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -588,13 +597,14 @@ UniValue omni_sendsto(const UniValue& params, bool fHelp)
     // perform checks
     RequireBalance(fromAddress, propertyId, amount);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_SendToOwners(propertyId, amount, distributionPropertyId);
+    std::vector<unsigned char> compressedPayload = CreatePayload_SendToOwners(propertyId, amount, distributionPropertyId, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", redeemAddress, 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", redeemAddress, 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -644,13 +654,14 @@ UniValue omni_sendgrant(const UniValue& params, bool fHelp)
     RequireManagedProperty(propertyId);
     RequireTokenIssuer(fromAddress, propertyId);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_Grant(propertyId, amount, memo);
+    std::vector<unsigned char> compressedPayload = CreatePayload_Grant(propertyId, amount, memo, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, toAddress, "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, toAddress, "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -698,13 +709,14 @@ UniValue omni_sendrevoke(const UniValue& params, bool fHelp)
     RequireTokenIssuer(fromAddress, propertyId);
     RequireBalance(fromAddress, propertyId, amount);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_Revoke(propertyId, amount, memo);
+    std::vector<unsigned char> compressedPayload = CreatePayload_Revoke(propertyId, amount, memo, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -748,13 +760,14 @@ UniValue omni_sendclosecrowdsale(const UniValue& params, bool fHelp)
     RequireActiveCrowdsale(propertyId);
     RequireTokenIssuer(fromAddress, propertyId);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_CloseCrowdsale(propertyId);
+    std::vector<unsigned char> compressedPayload = CreatePayload_CloseCrowdsale(propertyId, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -867,13 +880,14 @@ UniValue omni_sendtrade(const UniValue& params, bool fHelp)
     RequireSameEcosystem(propertyIdForSale, propertyIdDesired);
     RequireDifferentIds(propertyIdForSale, propertyIdDesired);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_MetaDExTrade(propertyIdForSale, amountForSale, propertyIdDesired, amountDesired);
+    std::vector<unsigned char> compressedPayload = CreatePayload_MetaDExTrade(propertyIdForSale, amountForSale, propertyIdDesired, amountDesired, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -925,13 +939,14 @@ UniValue omni_sendcanceltradesbyprice(const UniValue& params, bool fHelp)
     RequireDifferentIds(propertyIdForSale, propertyIdDesired);
     // TODO: check, if there are matching offers to cancel
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_MetaDExCancelPrice(propertyIdForSale, amountForSale, propertyIdDesired, amountDesired);
+    std::vector<unsigned char> compressedPayload = CreatePayload_MetaDExCancelPrice(propertyIdForSale, amountForSale, propertyIdDesired, amountDesired, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -979,13 +994,14 @@ UniValue omni_sendcanceltradesbypair(const UniValue& params, bool fHelp)
     RequireDifferentIds(propertyIdForSale, propertyIdDesired);
     // TODO: check, if there are matching offers to cancel
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_MetaDExCancelPair(propertyIdForSale, propertyIdDesired);
+    std::vector<unsigned char> compressedPayload = CreatePayload_MetaDExCancelPair(propertyIdForSale, propertyIdDesired, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -1027,13 +1043,14 @@ UniValue omni_sendcancelalltrades(const UniValue& params, bool fHelp)
     // perform checks
     // TODO: check, if there are matching offers to cancel
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_MetaDExCancelEcosystem(ecosystem);
+    std::vector<unsigned char> compressedPayload = CreatePayload_MetaDExCancelEcosystem(ecosystem, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -1078,13 +1095,14 @@ UniValue omni_sendchangeissuer(const UniValue& params, bool fHelp)
     RequireExistingProperty(propertyId);
     RequireTokenIssuer(fromAddress, propertyId);
 
-    // create a payload for the transaction
+    // create payloads for the transaction
     std::vector<unsigned char> payload = CreatePayload_ChangeIssuer(propertyId);
+    std::vector<unsigned char> compressedPayload = CreatePayload_ChangeIssuer(propertyId, true);
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, toAddress, "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, toAddress, "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -1125,11 +1143,12 @@ UniValue omni_sendactivation(const UniValue& params, bool fHelp)
 
     // create a payload for the transaction
     std::vector<unsigned char> payload = CreatePayload_ActivateFeature(featureId, activationBlock, minClientVersion);
+    std::vector<unsigned char> compressedPayload; // management features will remain class C only until Class D locked in
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -1166,11 +1185,12 @@ UniValue omni_senddeactivation(const UniValue& params, bool fHelp)
 
     // create a payload for the transaction
     std::vector<unsigned char> payload = CreatePayload_DeactivateFeature(featureId);
+    std::vector<unsigned char> compressedPayload; // management features will remain class C only until Class D locked in
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {
@@ -1219,11 +1239,12 @@ UniValue omni_sendalert(const UniValue& params, bool fHelp)
 
     // create a payload for the transaction
     std::vector<unsigned char> payload = CreatePayload_OmniCoreAlert(alertType, expiryValue, alertMessage);
+    std::vector<unsigned char> compressedPayload; // management features will remain class C only until Class D locked in
 
     // request the wallet build the transaction (and if needed commit it)
     uint256 txid;
     std::string rawHex;
-    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, txid, rawHex, autoCommit);
+    int result = WalletTxBuilder(fromAddress, "", "", 0, payload, compressedPayload, txid, rawHex, autoCommit);
 
     // check error and return the txid (or raw hex depending on autocommit)
     if (result != 0) {

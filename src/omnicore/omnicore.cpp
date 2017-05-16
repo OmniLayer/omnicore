@@ -554,6 +554,7 @@ static bool TXExodusFundraiser(const CTransaction& tx, const std::string& sender
  *   1 Class A (p2pkh)
  *   2 Class B (multisig)
  *   3 Class C (op-return)
+ *   4 Class D (op-return compressed)
  */
 int mastercore::GetEncodingClass(const CTransaction& tx, int nBlock)
 {
@@ -561,29 +562,21 @@ int mastercore::GetEncodingClass(const CTransaction& tx, int nBlock)
     bool hasMultisig = false;
     bool hasOpReturn = false;
     bool hasMoney = false;
+    bool hasShortMarker = false;
 
     /* Fast Search
      * Perform a string comparison on hex for each scriptPubKey & look directly for Exodus hash160 bytes or omni marker bytes
      * This allows to drop non-Omni transactions with less work
      */
+    std::string strClassD = "6f6c";
     std::string strClassC = "6f6d6e69";
     std::string strClassAB = "76a914946cb2e08075bcbaf157e47bcb67eb2b2339d24288ac";
     bool examineClosely = false;
     for (unsigned int n = 0; n < tx.vout.size(); ++n) {
         const CTxOut& output = tx.vout[n];
         std::string strSPB = HexStr(output.scriptPubKey.begin(), output.scriptPubKey.end());
-        if (strSPB != strClassAB) { // not an exodus marker
-            if (nBlock < 395000) { // class C not enabled yet, no need to search for marker bytes
-                continue;
-            } else {
-                if (strSPB.find(strClassC) != std::string::npos) {
-                    examineClosely = true;
-                    break;
-                }
-            }
-        } else {
+        if (strSPB == strClassAB || strSPB.find(strClassC) != std::string::npos || strSPB.find(strClassD) != std::string::npos) {
             examineClosely = true;
-            break;
         }
     }
 
@@ -622,25 +615,34 @@ int mastercore::GetEncodingClass(const CTransaction& tx, int nBlock)
         }
         if (outType == TX_NULL_DATA) {
             // Ensure there is a payload, and the first pushed element equals,
-            // or starts with the "omni" marker
+            // or starts with the "omni" or "ol"  marker
             std::vector<std::string> scriptPushes;
             if (!GetScriptPushes(output.scriptPubKey, scriptPushes)) {
                 continue;
             }
             if (!scriptPushes.empty()) {
-                std::vector<unsigned char> vchMarker = GetOmMarker();
+                std::vector<unsigned char> vchMarker = GetOmMarker(OMNI_CLASS_C);
+                std::vector<unsigned char> vchShortMarker = GetOmMarker(OMNI_CLASS_D);
                 std::vector<unsigned char> vchPushed = ParseHex(scriptPushes[0]);
-                if (vchPushed.size() < vchMarker.size()) {
-                    continue;
+                if (vchPushed.size() >= vchMarker.size()) {
+                    if (std::equal(vchMarker.begin(), vchMarker.end(), vchPushed.begin())) {
+                        hasOpReturn = true;
+                    }
                 }
-                if (std::equal(vchMarker.begin(), vchMarker.end(), vchPushed.begin())) {
-                    hasOpReturn = true;
+                if (vchPushed.size() >= vchShortMarker.size()) {
+                    if (std::equal(vchShortMarker.begin(), vchShortMarker.end(), vchPushed.begin())) {
+                        hasOpReturn = true;
+                        hasShortMarker = true;
+                    }
                 }
             }
         }
     }
 
-    if (hasOpReturn) {
+    if (hasOpReturn && hasShortMarker) {
+        return OMNI_CLASS_D;
+    }
+    if (hasOpReturn && !hasShortMarker) {
         return OMNI_CLASS_C;
     }
     if (hasExodus && hasMultisig) {
@@ -731,6 +733,11 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
         PrintToLog("%s(block=%d, %s idx= %d); txid: %s\n", __FUNCTION__, nBlock, DateTimeStrFormat("%Y-%m-%d %H:%M:%S", nTime), idx, wtx.GetHash().GetHex());
     }
 
+    if (omniClass == OMNI_CLASS_D && !IsFeatureActivated(FEATURE_CLASS_D, nBlock)) {
+        PrintToLog("%s() REJECT: transaction is Class D but it's not activated yet (txid %s)\n", __func__, wtx.GetHash().GetHex());
+        return -112; // Class D transaction prior to activation
+    }
+
     // Add previous transaction inputs to the cache
     if (!FillTxInputCache(wtx)) {
         PrintToLog("%s() ERROR: failed to get inputs for %s\n", __func__, wtx.GetHash().GetHex());
@@ -742,7 +749,7 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
     // ### SENDER IDENTIFICATION ###
     std::string strSender;
 
-    if (omniClass != OMNI_CLASS_C)
+    if (omniClass < OMNI_CLASS_C )
     {
         // OLD LOGIC - collect input amounts and identify sender via "largest input by sum"
         std::map<std::string, int64_t> inputs_sum_of_values;
@@ -935,8 +942,8 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
             }
         }
     }
-    // ### CLASS B / CLASS C PARSING ###
-    if ((omniClass == OMNI_CLASS_B) || (omniClass == OMNI_CLASS_C)) {
+    // ### CLASS B / CLASS C / CLASS D PARSING ###
+    if ((omniClass != OMNI_CLASS_A)) {
         if (msc_debug_parser_data) PrintToLog("Beginning reference identification\n");
         bool referenceFound = false; // bool to hold whether we've found the reference yet
         bool changeRemoved = false; // bool to hold whether we've ignored the first output to sender as change
@@ -1061,9 +1068,8 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
                 memcpy(m*(PACKET_SIZE-1)+single_pkt, 1+packets[m], PACKET_SIZE-1); // now ignoring sequence numbers for Class B packets
             }
         }
-
-        // ### CLASS C SPECIFIC PARSING ###
-        if (omniClass == OMNI_CLASS_C) {
+        // ### CLASS C AND D SPECIFIC PARSING ###
+        if (omniClass == OMNI_CLASS_C || omniClass == OMNI_CLASS_D) {
             std::vector<std::string> op_return_script_data;
 
             // ### POPULATE OP RETURN SCRIPT DATA ###
@@ -1083,7 +1089,7 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
                     }
                     // TODO: maybe encapsulate the following sort of messy code
                     if (!vstrPushes.empty()) {
-                        std::vector<unsigned char> vchMarker = GetOmMarker();
+                        std::vector<unsigned char> vchMarker = GetOmMarker(omniClass);
                         std::vector<unsigned char> vchPushed = ParseHex(vstrPushes[0]);
                         if (vchPushed.size() < vchMarker.size()) {
                             continue;
@@ -1096,7 +1102,11 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
                             op_return_script_data.insert(op_return_script_data.end(), vstrPushes.begin(), vstrPushes.end());
 
                             if (msc_debug_parser_data) {
-                                PrintToLog("Class C transaction detected: %s parsed to %s at vout %d\n", wtx.GetHash().GetHex(), vstrPushes[0], n);
+                                if (omniClass == OMNI_CLASS_D) {
+                                    PrintToLog("Class D transaction detected: %s parsed to %s at vout %d\n", wtx.GetHash().GetHex(), vstrPushes[0], n);
+                                } else {
+                                    PrintToLog("Class C transaction detected: %s parsed to %s at vout %d\n", wtx.GetHash().GetHex(), vstrPushes[0], n);
+                                }
                             }
                         }
                     }
@@ -2358,7 +2368,7 @@ bool mastercore_handler_tx(const CTransaction& tx, int nBlock, unsigned int idx,
  */
 bool mastercore::UseEncodingClassC(size_t nDataSize)
 {
-    size_t nTotalSize = nDataSize + GetOmMarker().size(); // Marker "omni"
+    size_t nTotalSize = nDataSize + GetOmMarker(OMNI_CLASS_C).size(); // Marker "omni"
     bool fDataEnabled = GetBoolArg("-datacarrier", true);
     int nBlockNow = GetHeight();
     if (!IsAllowedOutputType(TX_NULL_DATA, nBlockNow)) {
@@ -2367,15 +2377,38 @@ bool mastercore::UseEncodingClassC(size_t nDataSize)
     return nTotalSize <= nMaxDatacarrierBytes && fDataEnabled;
 }
 
+/**
+ * Determines whether Class D is active & whether the compressed payload is suitable size.
+ *
+ * @param nDataSize The length of the payload
+ * @return True, if Class D is enabled and the payload is small enough
+ */
+bool mastercore::UseEncodingClassD(size_t nDataSize)
+{
+    size_t nTotalSize = nDataSize + GetOmMarker(OMNI_CLASS_D).size(); // Marker "ol"
+    int nBlockNow = GetHeight();
+    bool fDataEnabled = GetBoolArg("-datacarrier", true);
+    bool fClassDEnabled = IsFeatureActivated(FEATURE_CLASS_D, nBlockNow);
+    if (nDataSize == 0) { // no compressed payload supplied
+        fClassDEnabled = false;
+    }
+    if (!IsAllowedOutputType(TX_NULL_DATA, nBlockNow)) {
+        fDataEnabled = false;
+    }
+    return nTotalSize <= nMaxDatacarrierBytes && fDataEnabled && fClassDEnabled;
+}
+
 // This function requests the wallet create an Omni transaction using the supplied parameters and payload
 int mastercore::WalletTxBuilder(const std::string& senderAddress, const std::string& receiverAddress, const std::string& redemptionAddress,
-        int64_t referenceAmount, const std::vector<unsigned char>& data, uint256& txid, std::string& rawHex, bool commit, unsigned int minInputs)
+        int64_t referenceAmount, const std::vector<unsigned char>& data, const std::vector<unsigned char>& compressedData, uint256& txid,
+        std::string& rawHex, bool commit, unsigned int minInputs)
 {
 #ifdef ENABLE_WALLET
     if (pwalletMain == NULL) return MP_ERR_WALLET_ACCESS;
 
-    // Determine the class to send the transaction via - default is Class C
-    int omniTxClass = OMNI_CLASS_C;
+    // Determine the class to send the transaction via - default is Class D if enabled, otherwise Class C
+    int omniTxClass = OMNI_CLASS_D;
+    if (!UseEncodingClassD(compressedData.size())) omniTxClass = OMNI_CLASS_C;
     if (!UseEncodingClassC(data.size())) omniTxClass = OMNI_CLASS_B;
 
     // Prepare the transaction - first setup some vars
@@ -2405,7 +2438,10 @@ int mastercore::WalletTxBuilder(const std::string& senderAddress, const std::str
             if (!OmniCore_Encode_ClassB(senderAddress,redeemingPubKey,data,vecSend)) { return MP_ENCODING_ERROR; }
         break; }
         case OMNI_CLASS_C:
-            if(!OmniCore_Encode_ClassC(data,vecSend)) { return MP_ENCODING_ERROR; }
+            if(!OmniCore_Encode_ClassCD(data,vecSend,OMNI_CLASS_C)) { return MP_ENCODING_ERROR; }
+        break;
+        case OMNI_CLASS_D:
+            if(!OmniCore_Encode_ClassCD(compressedData,vecSend,OMNI_CLASS_D)) { return MP_ENCODING_ERROR; }
         break;
     }
 
@@ -2450,7 +2486,7 @@ int mastercore::WalletTxBuilder(const std::string& senderAddress, const std::str
                 // shift the bytes per sigops ratio in our favor
                 ++minInputs;
                 return WalletTxBuilder(senderAddress, receiverAddress, redemptionAddress,
-                    referenceAmount, data, txid, rawHex, commit, minInputs);
+                    referenceAmount, data, compressedData, txid, rawHex, commit, minInputs);
             } else {
                 PrintToLog("%s WARNING: %s has %d sigops, and may not confirm in time\n",
                         __func__, wtxNew.GetHash().GetHex(), nSigOps);
@@ -3871,11 +3907,16 @@ const CBitcoinAddress ExodusCrowdsaleAddress(int nBlock)
 }
 
 /**
- * @return The marker for class C transactions.
+ * @return The marker for class C or D transactions.
  */
-const std::vector<unsigned char> GetOmMarker()
+const std::vector<unsigned char> GetOmMarker(int txClass)
 {
-    static unsigned char pch[] = {0x6f, 0x6d, 0x6e, 0x69}; // Hex-encoded: "omni"
+    static unsigned char pchClassC[] = {0x6f, 0x6d, 0x6e, 0x69}; // Hex-encoded: "omni"
+    static unsigned char pchClassD[] = {0x6f, 0x6c}; // Hex-encoded: "ol"
 
-    return std::vector<unsigned char>(pch, pch + sizeof(pch) / sizeof(pch[0]));
+    if (txClass == OMNI_CLASS_D) {
+        return std::vector<unsigned char>(pchClassD, pchClassD + sizeof(pchClassD) / sizeof(pchClassD[0]));
+    } else {
+        return std::vector<unsigned char>(pchClassC, pchClassC + sizeof(pchClassC) / sizeof(pchClassC[0]));
+    }
 }

@@ -34,6 +34,8 @@ const uint16_t FEATURE_TRADEALLPAIRS = 8;
 const uint16_t FEATURE_FEES = 9;
 //! Feature identifier to enable cross property (v1) Send To Owners
 const uint16_t FEATURE_STOV1 = 10;
+//! Feature identifier to enable Class D transactions (compressed payloads)
+const uint16_t FEATURE_CLASS_D = 13;
 
 //! When (propertyTotalTokens / OMNI_FEE_THRESHOLD) is reached fee distribution will occur
 const int64_t OMNI_FEE_THRESHOLD = 100000; // 0.001%
@@ -94,6 +96,9 @@ public:
     int MULTISIG_BLOCK;
     //! Block to enable OP_RETURN based encoding
     int NULLDATA_BLOCK;
+
+    //! Block to enable payload compression (class D)
+    int COMPRESS_PAYLOAD_BLOCK;
 
     //! Block to enable alerts and notifications
     int MSC_ALERT_BLOCK;

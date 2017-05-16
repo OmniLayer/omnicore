@@ -80,11 +80,11 @@ bool OmniCore_Encode_ClassB(const std::string& senderAddress, const CPubKey& red
  * The request is rejected, if the size of the payload with marker is larger than
  * the allowed data carrier size ("-datacarriersize=n").
  */
-bool OmniCore_Encode_ClassC(const std::vector<unsigned char>& vchPayload,
-        std::vector<std::pair <CScript, int64_t> >& vecOutputs)
+bool OmniCore_Encode_ClassCD(const std::vector<unsigned char>& vchPayload,
+        std::vector<std::pair <CScript, int64_t> >& vecOutputs, int txClass)
 {
     std::vector<unsigned char> vchData;
-    std::vector<unsigned char> vchOmBytes = GetOmMarker();
+    std::vector<unsigned char> vchOmBytes = GetOmMarker(txClass);
     vchData.insert(vchData.end(), vchOmBytes.begin(), vchOmBytes.end());
     vchData.insert(vchData.end(), vchPayload.begin(), vchPayload.end());
     if (vchData.size() > nMaxDatacarrierBytes) { return false; }
