@@ -409,7 +409,43 @@ bool mastercore::update_tally_map(const std::string& who, uint32_t propertyId, i
 //
 
 /**
- * Calculates and updates the "development mastercoins".
+ * Calculates the "Development Omnis" for a given timestamp.
+ *
+ * @param nTime  The timestamp of the block to update the "Dev Omni" for
+ * @return The number of "Dev Omni"
+ */
+int64_t GetDevOmni(unsigned int nTime)
+{
+    // do nothing if before end of fundraiser
+    if (nTime < 1377993874) return 0;
+
+    int64_t all_reward = 5631623576222;
+    int64_t seconds_in_one_year = 31556926;
+    int64_t seconds_passed = nTime - 1377993874; // exodus bootstrap deadline
+
+    double years = static_cast<double>(seconds_passed);
+    PrintToConsole("\nyears: %10.16f\n", years);
+    years /= static_cast<double>(seconds_in_one_year);
+    PrintToConsole("years: %10.16f\n", years);
+
+    double part_available = 1.0;
+    PrintToConsole("part_available: %10.16f\n", part_available);
+    part_available -= pow(0.5, years);
+    PrintToConsole("part_available: %10.16f\n", part_available);
+
+    double available_reward = static_cast<double>(all_reward);
+    PrintToConsole("available_reward: %10.16f\n", available_reward);
+    available_reward *= part_available;
+    PrintToConsole("available_reward: %10.16f\n", available_reward);
+
+    int64_t reward = rounduint64(available_reward);
+    PrintToConsole("reward: %d\n", reward);
+
+    return reward;
+}
+
+/**
+ * Calculates and updates the "Development Omnis".
  *
  * For every 10 MSC sold during the Exodus period, 1 additional "Dev MSC" was generated,
  * which are being awarded to the Exodus address slowly over the years.
@@ -418,29 +454,17 @@ bool mastercore::update_tally_map(const std::string& who, uint32_t propertyId, i
  * https://github.com/OmniLayer/spec#development-mastercoins-dev-msc-previously-reward-mastercoins
  *
  * Note:
- * If timestamps are out of order, then previously vested "Dev MSC" are not voided.
+ * If timestamps are out of order, then previously vested "Dev Omni" are not voided.
  *
- * @param nTime  The timestamp of the block to update the "Dev MSC" for
- * @return The number of "Dev MSC" generated
+ * @param nTime  The timestamp of the block to update the "Dev Omni" for
+ * @return The number of "Dev Omni" generated
  */
 static int64_t calculate_and_update_devmsc(unsigned int nTime)
 {
-    // do nothing if before end of fundraiser
-    if (nTime < 1377993874) return 0;
-
-    // taken mainly from msc_validate.py: def get_available_reward(height, c)
-    int64_t devmsc = 0;
-    int64_t exodus_delta = 0;
-    // spec constants:
     const int64_t all_reward = 5631623576222;
-    const double seconds_in_one_year = 31556926;
-    const double seconds_passed = nTime - 1377993874; // exodus bootstrap deadline
-    const double years = seconds_passed / seconds_in_one_year;
-    const double part_available = 1 - pow(0.5, years);
-    const double available_reward = all_reward * part_available;
 
-    devmsc = rounduint64(available_reward);
-    exodus_delta = devmsc - exodus_prev;
+    int64_t devmsc = GetDevOmni(nTime);
+    int64_t exodus_delta = devmsc - exodus_prev;
 
     if (msc_debug_exo) PrintToLog("devmsc=%d, exodus_prev=%d, exodus_delta=%d\n", devmsc, exodus_prev, exodus_delta);
 
