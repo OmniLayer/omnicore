@@ -2344,7 +2344,7 @@ bool mastercore_handler_tx(const CTransaction& tx, int nBlock, unsigned int idx,
         if (interp_ret != PKT_ERROR - 2) {
             bool bValid = (0 <= interp_ret);
             p_txlistdb->recordTX(tx.GetHash(), bValid, nBlock, mp_obj.getType(), mp_obj.getNewAmount());
-            p_OmniTXDB->RecordTransaction(tx.GetHash(), idx);
+            p_OmniTXDB->RecordTransaction(tx.GetHash(), nBlock, idx, mp_obj.getSender(), mp_obj.getReceiver());
         }
         fFoundTx |= (interp_ret == 0);
     }
@@ -2456,15 +2456,58 @@ int mastercore::WalletTxBuilder(const std::string& senderAddress, const std::str
 
 }
 
-void COmniTransactionDB::RecordTransaction(const uint256& txid, uint32_t posInBlock)
+void COmniTransactionDB::RecordTransaction(const uint256& txid, int block, uint32_t posInBlock, std::string senderAddress, std::string referenceAddress)
 {
     assert(pdb);
 
     const std::string key = txid.ToString();
-    const std::string value = strprintf("%d", posInBlock);
+    const std::string value = strprintf("%d:%d:%s:%s", block, posInBlock, senderAddress, referenceAddress);
 
     Status status = pdb->Put(writeoptions, key, value);
     ++nWritten;
+}
+
+// Returns a map of transactions involving an address
+std::map<std::string, uint256> COmniTransactionDB::FetchAddressTransactions(std::string address, int count, int startBlock, int endBlock)
+{
+    LOCK(cs_tally);
+    Iterator* it = NewIterator();
+    std::map<std::string, uint256> mapResponse;
+
+    // Iterate database and add transactions involving the specified address to the map using a block/pos sort key
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        std::vector<std::string> vstr;
+        std::string strValue = it->value().ToString();
+        boost::split(vstr, strValue, boost::is_any_of(":"), boost::token_compress_on);
+        assert(vstr.size() == 4);
+        if (address == vstr[2] || address == vstr[3]) {
+            uint256 txHash = uint256S(it->key().ToString());
+            int block = boost::lexical_cast<int>(vstr[0]);
+            uint32_t posInBlock = boost::lexical_cast<uint32_t>(vstr[1]);
+            if (block < startBlock || block > endBlock) continue;
+            std::string sortKey = strprintf("%06d%010d", block, posInBlock);
+            mapResponse.insert(std::make_pair(sortKey, txHash));
+        }
+    }
+    delete it;
+
+    // STO does not explicitly reference receivers, but STO receipts to an address are considered transactions none-the-less so must be manually included
+    std::string strSTOReceipts = s_stolistdb->getAddressSTOReceipts(address);
+    std::vector<std::string> vecReceipts;
+    if (!strSTOReceipts.empty()) boost::split(vecReceipts, strSTOReceipts, boost::is_any_of(","), boost::token_compress_on);
+    for (size_t i = 0; i < vecReceipts.size(); i++) {
+        std::vector<std::string> svstr;
+        boost::split(svstr, vecReceipts[i], boost::is_any_of(":"), boost::token_compress_on);
+        if (svstr.size() != 4) continue;
+        int blockHeight = atoi(svstr[1]);
+        if (blockHeight < startBlock || blockHeight > endBlock) continue;
+        uint256 txHash = uint256S(svstr[0]);
+        int blockPosition = FetchTransactionPosition(txHash);
+        std::string sortKey = strprintf("%06d%010d", blockHeight, blockPosition);
+        mapResponse.insert(std::make_pair(sortKey, txHash));
+    }
+
+    return mapResponse;
 }
 
 uint32_t COmniTransactionDB::FetchTransactionPosition(const uint256& txid)
@@ -2475,12 +2518,30 @@ uint32_t COmniTransactionDB::FetchTransactionPosition(const uint256& txid)
     std::string strValue;
     uint32_t posInBlock = 999999; // setting an initial arbitrarily high value will ensure transaction is always "last" in event of bug/exploit
 
-    Status status = pdb->Get(readoptions, key, &strValue);
+    leveldb::Status status = pdb->Get(readoptions, key, &strValue);
     if (status.ok()) {
-        posInBlock = boost::lexical_cast<uint32_t>(strValue);
+        std::vector<std::string> vstr;
+        boost::split(vstr, strValue, boost::is_any_of(":"), boost::token_compress_on);
+        if (4 == vstr.size()) {
+            posInBlock = boost::lexical_cast<uint32_t>(vstr[1]);
+        }
     }
 
     return posInBlock;
+}
+
+
+void COmniTransactionDB::printAll()
+{
+    int count = 0;
+    Iterator* it = NewIterator();
+
+    for (it->SeekToFirst(); it->Valid(); it->Next()) {
+        ++count;
+        PrintToConsole("entry #%8d= %s:%s\n", count, it->key().ToString(), it->value().ToString());
+    }
+
+    delete it;
 }
 
 std::set<int> CMPTxList::GetSeedBlocks(int startHeight, int endHeight)
@@ -3080,6 +3141,15 @@ unsigned int n_found = 0;
 }
 
 // MPSTOList here
+std::string CMPSTOList::getAddressSTOReceipts(std::string address)
+{
+  if (!pdb) return "";
+
+  std::string strValue;
+  leveldb::Status status = pdb->Get(readoptions, address, &strValue);
+  return strValue;
+}
+
 std::string CMPSTOList::getMySTOReceipts(string filterAddress)
 {
   if (!pdb) return "";

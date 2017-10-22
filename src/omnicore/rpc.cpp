@@ -734,6 +734,12 @@ UniValue mscrpc(const UniValue& params, bool fHelp)
 
             break;
         }
+        case 15:
+        {
+            // display the Omni transaction DB
+            p_OmniTXDB->printAll();
+            break;
+        }
         default:
             break;
     }
@@ -1693,6 +1699,72 @@ UniValue omni_gettransaction(const UniValue& params, bool fHelp)
     return txobj;
 }
 
+UniValue omni_gethistory(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() == 0 || params.size() > 4)
+        throw runtime_error(
+            "omni_gethistory \"address\" ( count startblock endblock )\n"
+            "\nList historical Omni Layer transactions for a specific address, optionally filtered by block boundaries.\n"
+            "\nArguments:\n"
+            "1. address              (string, required) the Omni Layer address\n"
+            "2. maxcount             (number, optional) show at most n historical transactions (default: 10)\n"
+            "3. startblock           (number, optional) do not include historical transactions before this block (default: 0)\n"
+            "4. endblock             (number, optional) do not include historical transactions after this block (default: 999999)\n"
+            "\nResult:\n"
+            "[                                 (array of JSON objects)\n"
+            "  {\n"
+            "    \"txid\" : \"hash\",                  (string) the hex-encoded hash of the transaction\n"
+            "    \"sendingaddress\" : \"address\",     (string) the Bitcoin address of the sender\n"
+            "    \"referenceaddress\" : \"address\",   (string) a Bitcoin address used as reference (if any)\n"
+            "    \"ismine\" : true|false,            (boolean) whether the transaction involes an address in the wallet\n"
+            "    \"confirmations\" : nnnnnnnnnn,     (number) the number of transaction confirmations\n"
+            "    \"fee\" : \"n.nnnnnnnn\",             (string) the transaction fee in bitcoins\n"
+            "    \"blocktime\" : nnnnnnnnnn,         (number) the timestamp of the block that contains the transaction\n"
+            "    \"valid\" : true|false,             (boolean) whether the transaction is valid\n"
+            "    \"version\" : n,                    (number) the transaction version\n"
+            "    \"type_int\" : n,                   (number) the transaction type as number\n"
+            "    \"type\" : \"type\",                  (string) the transaction type as string\n"
+            "    [...]                             (mixed) other transaction type specific properties\n"
+            "  },\n"
+            "  ...\n"
+            "]\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_gethistory", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\"")
+            + HelpExampleRpc("omni_gethistory", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\"")
+        );
+
+    // obtain parameters - default to last 10 transactions with no block restrictions
+    std::string address = params[0].get_str();
+    int64_t nCount = 10;
+    if (params.size() > 1) nCount = params[1].get_int64();
+    if (nCount < 0) throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative count");
+    int64_t nStartBlock = 0;
+    if (params.size() > 2) nStartBlock = params[2].get_int64();
+    if (nStartBlock < 0) throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative start block");
+    int64_t nEndBlock = 999999;
+    if (params.size() > 3) nEndBlock = params[3].get_int64();
+    if (nEndBlock < 0) throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative end block");
+
+    // obtain a sorted list of Omni layer transactions for the address (including STO receipts)
+    std::map<std::string,uint256> mapTransactions = p_OmniTXDB->FetchAddressTransactions(address, nCount, nStartBlock, nEndBlock);
+
+    // iterate backwards (most recent first) over transactions map and decode each one, adding to response array
+    UniValue response(UniValue::VARR);
+    int64_t nAdded = 0;
+    for (std::map<std::string,uint256>::reverse_iterator it = mapTransactions.rbegin(); it != mapTransactions.rend(); it++) {
+        uint256 txHash = it->second;
+        UniValue txobj(UniValue::VOBJ);
+        int populateResult = populateRPCTransactionObject(txHash, txobj, address);
+        if (0 == populateResult) {
+            response.push_back(txobj);
+            nAdded++;
+        }
+        if (nAdded >= nCount) break;
+    }
+
+    return response;
+}
+
 UniValue omni_listtransactions(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() > 5)
@@ -2187,6 +2259,7 @@ static const CRPCCommand commands[] =
     { "omni layer (data retrieval)", "omni_getfeetrigger",             &omni_getfeetrigger,              false },
     { "omni layer (data retrieval)", "omni_getfeedistribution",        &omni_getfeedistribution,         false },
     { "omni layer (data retrieval)", "omni_getfeedistributions",       &omni_getfeedistributions,        false },
+    { "omni layer (data retrieval)", "omni_gethistory",                &omni_gethistory,                 false },
 #ifdef ENABLE_WALLET
     { "omni layer (data retrieval)", "omni_listtransactions",          &omni_listtransactions,           false },
     { "omni layer (data retrieval)", "omni_getfeeshare",               &omni_getfeeshare,                false },

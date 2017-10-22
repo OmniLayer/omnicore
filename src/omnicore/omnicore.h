@@ -36,7 +36,7 @@ int const MAX_STATE_HISTORY = 50;
 #define TEST_ECO_PROPERTY_1 (0x80000003UL)
 
 // increment this value to force a refresh of the state (similar to --startclean)
-#define DB_VERSION 3
+#define DB_VERSION 4
 
 // could probably also use: int64_t maxInt64 = std::numeric_limits<int64_t>::max();
 // maximum numeric values from the spec:
@@ -177,8 +177,10 @@ public:
      *
      * and so on...
      */
-    void RecordTransaction(const uint256& txid, uint32_t posInBlock);
+    void RecordTransaction(const uint256& txid, int block, uint32_t posInBlock, std::string senderAddress, std::string referenceAddress);
     uint32_t FetchTransactionPosition(const uint256& txid);
+    std::map<std::string, uint256> FetchAddressTransactions(std::string address, int count, int startBlock, int endBlock);
+    void printAll();
 };
 
 /** LevelDB based storage for STO recipients.
@@ -198,6 +200,7 @@ public:
     }
 
     void getRecipients(const uint256 txid, string filterAddress, UniValue *recipientArray, uint64_t *total, uint64_t *numRecipients);
+    std::string getAddressSTOReceipts(std::string address);
     std::string getMySTOReceipts(string filterAddress);
     int deleteAboveBlock(int blockNum);
     void printStats();
