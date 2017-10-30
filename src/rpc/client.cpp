@@ -135,6 +135,10 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "omni_getfeetrigger", 0 },
     { "omni_getfeedistribution", 0 },
     { "omni_getfeedistributions", 0 },
+    { "omni_getuniquetokens", 1 },
+    { "omni_getuniquetokenowner", 0 },
+    { "omni_getuniquetokenowner", 1 },
+    { "omni_getuniquetokenranges", 0 },
 
     /* Omni Core - transaction calls */
     { "omni_send", 2 },
@@ -176,6 +180,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "omni_sendactivation", 3 },
     { "omni_sendalert", 1 },
     { "omni_sendalert", 2 },
+    { "omni_sendunique", 2 },
+    { "omni_sendunique", 3 },
+    { "omni_sendunique", 4 },
 
     /* Omni Core - raw transaction calls */
     { "omni_decodetransaction", 1 },
@@ -219,6 +226,9 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "omni_createpayload_canceltradesbypair", 0 },
     { "omni_createpayload_canceltradesbypair", 1 },
     { "omni_createpayload_cancelalltrades", 0 },
+    { "omni_sendunique", 0 },
+    { "omni_sendunique", 1 },
+    { "omni_sendunique", 2 },
 
     /* Omni Core - backwards compatibility */
     { "getcrowdsale_MP", 0 },

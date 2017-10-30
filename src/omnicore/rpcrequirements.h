@@ -13,13 +13,16 @@ void RequireDifferentIds(uint32_t propertyId, uint32_t otherId);
 void RequireCrowdsale(uint32_t propertyId);
 void RequireActiveCrowdsale(uint32_t propertyId);
 void RequireManagedProperty(uint32_t propertyId);
+void RequireUniqueProperty(uint32_t propertyId);
 void RequireTokenIssuer(const std::string& address, uint32_t propertyId);
 void RequireMatchingDExOffer(const std::string& address, uint32_t propertyId);
 void RequireNoOtherDExOffer(const std::string& address, uint32_t propertyId);
 void RequireSaneReferenceAmount(int64_t amount);
 void RequireSaneDExPaymentWindow(const std::string& address, uint32_t propertyId);
 void RequireSaneDExFee(const std::string& address, uint32_t propertyId);
+void RequireSaneUniqueRange(int64_t uniqueTokenStart, int64_t uniqueTokenEnd);
 void RequireHeightInChain(int blockHeight);
+void RequireUniqueTokenOwner(const std::string& address, uint32_t propertyId, int64_t uniqueTokenStart, int64_t uniqueTokenEnd);
 
 // TODO:
 // Checks for MetaDEx orders for cancel operations

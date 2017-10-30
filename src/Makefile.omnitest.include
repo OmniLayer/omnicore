@@ -31,6 +31,7 @@ OMNICORE_TEST_CPP = \
   omnicore/test/swapbyteorder_tests.cpp \
   omnicore/test/tally_tests.cpp \
   omnicore/test/uint256_extensions_tests.cpp \
+  omnicore/test/utdb_tests.cpp \
   omnicore/test/utils_tx.cpp \
   omnicore/test/version_tests.cpp
 

@@ -5,6 +5,7 @@
 
 UniValue omni_createpayload_simplesend(const UniValue& params, bool fHelp);
 UniValue omni_createpayload_sendall(const UniValue& params, bool fHelp);
+UniValue omni_createpayload_sendunique(const UniValue& params, bool fHelp);
 UniValue omni_createpayload_dexsell(const UniValue& params, bool fHelp);
 UniValue omni_createpayload_dexaccept(const UniValue& params, bool fHelp);
 UniValue omni_createpayload_sto(const UniValue& params, bool fHelp);

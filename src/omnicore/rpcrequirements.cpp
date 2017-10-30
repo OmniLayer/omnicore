@@ -94,6 +94,18 @@ void RequireManagedProperty(uint32_t propertyId)
     }
 }
 
+void RequireUniqueProperty(uint32_t propertyId)
+{
+    LOCK(cs_tally);
+    CMPSPInfo::Entry sp;
+    if (!mastercore::_my_sps->getSP(propertyId, sp)) {
+        throw JSONRPCError(RPC_DATABASE_ERROR, "Failed to retrieve property");
+    }
+    if (!sp.unique) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Property identifier does not refer to a unique property");
+    }
+}
+
 void RequireTokenIssuer(const std::string& address, uint32_t propertyId)
 {
     LOCK(cs_tally);
@@ -153,9 +165,32 @@ void RequireSaneDExFee(const std::string& address, uint32_t propertyId)
     }
 }
 
+void RequireSaneUniqueRange(int64_t uniqueTokenStart, int64_t uniqueTokenEnd)
+{
+    if (uniqueTokenStart <= 0) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Unique range start value must not be zero or negative");
+    }
+    if (uniqueTokenEnd <= 0) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Unique range end value must not be zero or negative");
+    }
+    if (uniqueTokenStart >= uniqueTokenEnd) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Unique range start value must be higher than unique range end value");
+    }
+}
+
 void RequireHeightInChain(int blockHeight)
 {
     if (blockHeight < 0 || mastercore::GetHeight() < blockHeight) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Block height is out of range");
+    }
+}
+
+void RequireUniqueTokenOwner(const std::string& address, uint32_t propertyId, int64_t uniqueTokenStart, int64_t uniqueTokenEnd)
+{
+    std::string rangeStartOwner = mastercore::p_utdb->GetUniqueTokenOwner(propertyId, uniqueTokenStart);
+    std::string rangeEndOwner = mastercore::p_utdb->GetUniqueTokenOwner(propertyId, uniqueTokenEnd);
+    bool contiguous = mastercore::p_utdb->IsRangeContiguous(propertyId, uniqueTokenStart, uniqueTokenEnd);
+    if (rangeStartOwner != address || rangeEndOwner != address || !contiguous) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Sender does not own the range being sent");
     }
 }

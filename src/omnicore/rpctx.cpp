@@ -187,6 +187,68 @@ UniValue omni_sendall(const UniValue& params, bool fHelp)
     }
 }
 
+UniValue omni_sendunique(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 5 || params.size() > 7)
+        throw runtime_error(
+            "omni_uniquesend \"fromaddress\" \"toaddress\" propertyid uniquetokenstart uniquetokenend \"redeemaddress\" \"referenceamount\" )\n"
+
+            "\nCreate and broadcast a simple send transaction.\n"
+
+            "\nArguments:\n"
+            "1. fromaddress          (string, required) the address to send from\n"
+            "2. toaddress            (string, required) the address of the receiver\n"
+            "3. propertyid           (number, required) the identifier of the tokens to send\n"
+            "4. uniquetokenstart     (number, required) the first token in the range to send\n"
+            "5. uniquetokenend       (number, required) the last token in the range to send\n"
+            "6. redeemaddress        (string, optional) an address that can spend the transaction dust (sender by default)\n"
+            "7. referenceamount      (string, optional) a bitcoin amount that is sent to the receiver (minimal by default)\n"
+
+            "\nResult:\n"
+            "\"hash\"                  (string) the hex-encoded transaction hash\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("omni_uniquesend", "\"3M9qvHKtgARhqcMtM5cRT9VaiDJ5PSfQGY\" \"37FaKponF7zqoMLUjEiko25pDiuVH5YLEa\" 70 1 1000")
+            + HelpExampleRpc("omni_uniquesend", "\"3M9qvHKtgARhqcMtM5cRT9VaiDJ5PSfQGY\", \"37FaKponF7zqoMLUjEiko25pDiuVH5YLEa\", 70, 1, 1000")
+        );
+
+    std::string fromAddress = ParseAddress(params[0]);
+    std::string toAddress = ParseAddress(params[1]);
+    uint32_t propertyId = ParsePropertyId(params[2]);
+    int64_t uniqueTokenStart = params[3].get_int64(); // unique tokens are always indivisible
+    int64_t uniqueTokenEnd =  params[4].get_int64();
+    int64_t uniqueTokenAmount = (uniqueTokenEnd - uniqueTokenStart)+1;
+    std::string redeemAddress = (params.size() > 5 && !ParseText(params[5]).empty()) ? ParseAddress(params[5]): "";
+    int64_t referenceAmount = (params.size() > 6) ? ParseAmount(params[6], true): 0;
+
+    // perform checks
+    RequireExistingProperty(propertyId);
+    RequireBalance(fromAddress, propertyId, uniqueTokenAmount);
+    RequireUniqueTokenOwner(fromAddress, propertyId, uniqueTokenStart, uniqueTokenEnd);
+    RequireSaneUniqueRange(uniqueTokenStart, uniqueTokenEnd);
+    RequireSaneReferenceAmount(referenceAmount);
+
+    // create a payload for the transaction
+    std::vector<unsigned char> payload = CreatePayload_SendUnique(propertyId, uniqueTokenStart, uniqueTokenEnd);
+
+    // request the wallet build the transaction (and if needed commit it)
+    uint256 txid;
+    std::string rawHex;
+    int result = WalletTxBuilder(fromAddress, toAddress, redeemAddress, referenceAmount, payload, txid, rawHex, autoCommit);
+
+    // check error and return the txid (or raw hex depending on autocommit)
+    if (result != 0) {
+        throw JSONRPCError(result, error_str(result));
+    } else {
+        if (!autoCommit) {
+            return rawHex;
+        } else {
+            PendingAdd(txid, fromAddress, MSC_TYPE_SEND_UNIQUE, propertyId, uniqueTokenAmount);
+            return txid.GetHex();
+        }
+    }
+}
+
 UniValue omni_senddexsell(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 7)
@@ -1258,6 +1320,7 @@ static const CRPCCommand commands[] =
     { "omni layer (transaction creation)", "omni_sendclosecrowdsale",      &omni_sendclosecrowdsale,      false },
     { "omni layer (transaction creation)", "omni_sendchangeissuer",        &omni_sendchangeissuer,        false },
     { "omni layer (transaction creation)", "omni_sendall",                 &omni_sendall,                 false },
+    { "omni layer (transaction creation)", "omni_sendunique",              &omni_sendunique,              false },
     { "hidden",                            "omni_senddeactivation",        &omni_senddeactivation,        true  },
     { "hidden",                            "omni_sendactivation",          &omni_sendactivation,          false },
     { "hidden",                            "omni_sendalert",               &omni_sendalert,               true  },

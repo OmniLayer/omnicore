@@ -32,6 +32,7 @@ OMNICORE_H = \
   omnicore/tally.h \
   omnicore/tx.h \
   omnicore/uint256_extensions.h \
+  omnicore/utdb.h \
   omnicore/utils.h \
   omnicore/utilsbitcoin.h \
   omnicore/version.h \
@@ -70,6 +71,7 @@ OMNICORE_CPP = \
   omnicore/sto.cpp \
   omnicore/tally.cpp \
   omnicore/tx.cpp \
+  omnicore/utdb.cpp \
   omnicore/utils.cpp \
   omnicore/utilsbitcoin.cpp \
   omnicore/version.cpp \

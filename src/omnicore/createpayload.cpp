@@ -58,6 +58,26 @@ std::vector<unsigned char> CreatePayload_SendAll(uint8_t ecosystem)
     return payload;
 }
 
+std::vector<unsigned char> CreatePayload_SendUnique(uint32_t propertyId, uint64_t uniqueTokenStart, uint64_t uniqueTokenEnd)
+{
+    std::vector<unsigned char> payload;
+    uint16_t messageType = 5;
+    uint16_t messageVer = 0;
+    mastercore::swapByteOrder16(messageType);
+    mastercore::swapByteOrder16(messageVer);
+    mastercore::swapByteOrder32(propertyId);
+    mastercore::swapByteOrder64(uniqueTokenStart);
+    mastercore::swapByteOrder64(uniqueTokenEnd);
+
+    PUSH_BACK_BYTES(payload, messageVer);
+    PUSH_BACK_BYTES(payload, messageType);
+    PUSH_BACK_BYTES(payload, propertyId);
+    PUSH_BACK_BYTES(payload, uniqueTokenStart);
+    PUSH_BACK_BYTES(payload, uniqueTokenEnd);
+
+    return payload;
+}
+
 std::vector<unsigned char> CreatePayload_DExSell(uint32_t propertyId, uint64_t amountForSale, uint64_t amountDesired, uint8_t timeLimit, uint64_t minFee, uint8_t subAction)
 {
     std::vector<unsigned char> payload;

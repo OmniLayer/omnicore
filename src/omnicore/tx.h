@@ -83,6 +83,10 @@ private:
     uint64_t min_fee;
     unsigned char subaction;
 
+    // Unique Send
+    uint64_t unique_token_start;
+    uint64_t unique_token_end;
+
     // Alert
     uint16_t alert_type;
     uint32_t alert_expiry;
@@ -106,6 +110,7 @@ private:
     bool interpret_SimpleSend();
     bool interpret_SendToOwners();
     bool interpret_SendAll();
+    bool interpret_SendUnique();
     bool interpret_TradeOffer();
     bool interpret_MetaDExTrade();
     bool interpret_MetaDExCancelPrice();
@@ -129,6 +134,7 @@ private:
     int logicMath_SimpleSend();
     int logicMath_SendToOwners();
     int logicMath_SendAll();
+    int logicMath_SendUnique();
     int logicMath_TradeOffer();
     int logicMath_AcceptOffer_BTC();
     int logicMath_MetaDExTrade();
@@ -202,6 +208,8 @@ public:
     uint32_t getMinClientVersion() const { return min_client_version; }
     unsigned int getIndexInBlock() const { return tx_idx; }
     uint32_t getDistributionProperty() const { return distribution_property; }
+    uint64_t getUniqueTokenStart() const { return unique_token_start; }
+    uint64_t getUniqueTokenEnd() const { return unique_token_end; }
 
     /** Creates a new CMPTransaction object. */
     CMPTransaction()
@@ -253,6 +261,8 @@ public:
         activation_block = 0;
         min_client_version = 0;
         distribution_property = 0;
+        unique_token_start = 0;
+        unique_token_end = 0;
     }
 
     /** Sets the given values. */

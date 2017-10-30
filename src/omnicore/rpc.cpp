@@ -26,6 +26,7 @@
 #include "omnicore/sto.h"
 #include "omnicore/tally.h"
 #include "omnicore/tx.h"
+#include "omnicore/utdb.h"
 #include "omnicore/utilsbitcoin.h"
 #include "omnicore/version.h"
 #include "omnicore/wallettxs.h"
@@ -147,6 +148,135 @@ bool BalanceToJSON(const std::string& address, uint32_t property, UniValue& bala
     } else {
         return true;
     }
+}
+
+// display the unique tokens owned by an address for a property
+UniValue omni_getuniquetokens(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 2)
+        throw runtime_error(
+            "omni_getuniquetokens \"address\" propertyid\n"
+            "\nReturns the unique tokens for a given address and property.\n"
+            "\nArguments:\n"
+            "1. address              (string, required) the address\n"
+            "2. propertyid           (number, required) the property identifier\n"
+            "\nResult:\n"
+            "[                           (array of JSON objects)\n"
+            "  {\n"
+            "  \"uniquetokenstart\" : n,  (number) the first token in this range\n"
+            "  \"uniquetokenend\" : n,    (number) the last token in this range\n"
+            "  \"amount\" : n             (number) the amount of tokens in the range\n"
+            "  },\n"
+            "  ...\n"
+            "]\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getuniquetokens", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\" 1")
+            + HelpExampleRpc("omni_getuniquetokens", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\", 1")
+        );
+
+    std::string address = ParseAddress(params[0]);
+    uint32_t propertyId = ParsePropertyId(params[1]);
+
+    RequireExistingProperty(propertyId);
+    RequireUniqueProperty(propertyId);
+
+    UniValue response(UniValue::VARR);
+
+    std::vector<std::pair<int64_t,int64_t> > uniqueRanges = p_utdb->GetAddressUniqueTokens(propertyId, address);
+
+    for (std::vector<std::pair<int64_t,int64_t> >::iterator it = uniqueRanges.begin(); it != uniqueRanges.end(); ++it) {
+        std::pair<int64_t,int64_t> range = *it;
+        int64_t amount = (range.second - range.first) + 1;
+        UniValue uniqueRangeObj(UniValue::VOBJ);
+        uniqueRangeObj.push_back(Pair("uniquetokenstart", range.first));
+        uniqueRangeObj.push_back(Pair("uniquetokenend", range.second));
+        uniqueRangeObj.push_back(Pair("amount", amount));
+        response.push_back(uniqueRangeObj);
+    }
+
+    return response;
+}
+
+// locates the owner of a token/range of tokens
+UniValue omni_getuniquetokenowner(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 2)
+        throw runtime_error(
+            "omni_getuniquetokenowner propertyid uniquetokenid\n"
+            "\nReturns the owning address for a unique token.\n"
+            "\nArguments:\n"
+            "1. propertyid           (number, required) the property identifier\n"
+            "2. uniquetokenid        (number, required) the unique token identifier\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"address\" : \"address\",  (string) the Bitcoin address of the owner\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getuniquetokenowner", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\" 1 55")
+            + HelpExampleRpc("omni_getuniquetokenowner", "\"1EXoDusjGwvnjZUyKkxZ4UHEf77z6A5S4P\", 1 55")
+        );
+
+    uint32_t propertyId = ParsePropertyId(params[0]);
+    int64_t uniqueToken = params[1].get_int64();
+
+    RequireExistingProperty(propertyId);
+    RequireUniqueProperty(propertyId);
+
+    std::string response = p_utdb->GetUniqueTokenOwner(propertyId, uniqueToken);
+    UniValue rpcObj(UniValue::VOBJ);
+    rpcObj.push_back(Pair("address", response));
+    return rpcObj;
+}
+
+// displays all the ranges and their addresses for a property
+UniValue omni_getuniquetokenranges(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "omni_getuniquetokenranges propertyid\n"
+            "\nReturns the ranges and their addresses for a unique token property.\n"
+            "\nArguments:\n"
+            "1. propertyid           (number, required) the property identifier\n"
+            "\nResult:\n"
+            "[                           (array of JSON objects)\n"
+            "  {\n"
+            "  \"address\" : \"address\", (string) the address\n"
+            "  \"uniquetokenstart\" : n,  (number) the first token in this range\n"
+            "  \"uniquetokenend\" : n,    (number) the last token in this range\n"
+            "  \"amount\" : n             (number) the amount of tokens in the range\n"
+            "  },\n"
+            "  ...\n"
+            "]\n"
+            "\nExamples:\n"
+            + HelpExampleCli("omni_getuniquetokenranges", "1")
+            + HelpExampleRpc("omni_getuniquetokenranges", "1")
+        );
+
+    uint32_t propertyId = ParsePropertyId(params[0]);
+
+    RequireExistingProperty(propertyId);
+    RequireUniqueProperty(propertyId);
+
+    UniValue response(UniValue::VARR);
+
+    std::vector<std::pair<std::string,std::pair<int64_t,int64_t> > > rangeMap = p_utdb->GetUniqueTokenRanges(propertyId);
+
+    for (std::vector<std::pair<std::string,std::pair<int64_t,int64_t> > >::iterator it = rangeMap.begin(); it!= rangeMap.end(); ++it) {
+        std::pair<std::string,std::pair<int64_t,int64_t> > entry = *it;
+        std::string address = entry.first;
+        std::pair<int64_t,int64_t> range = entry.second;
+        int64_t amount = (range.second - range.first) + 1;
+
+        UniValue uniqueRangeObj(UniValue::VOBJ);
+        uniqueRangeObj.push_back(Pair("address", address));
+        uniqueRangeObj.push_back(Pair("uniquetokenstart", range.first));
+        uniqueRangeObj.push_back(Pair("uniquetokenend", range.second));
+        uniqueRangeObj.push_back(Pair("amount", amount));
+
+        response.push_back(uniqueRangeObj);
+    }
+
+    return response;
 }
 
 // Obtains details of a fee distribution
@@ -706,6 +836,13 @@ UniValue mscrpc(const UniValue& params, bool fHelp)
             break;
         }
 #endif
+        case 12:
+        {
+            // dump the unique tokens database
+            p_utdb->printAll();
+            p_utdb->printStats();
+            break;
+        }
         case 14:
         {
             LOCK(cs_tally);
@@ -899,6 +1036,8 @@ UniValue omni_getproperty(const UniValue& params, bool fHelp)
             "  \"issuer\" : \"address\",            (string) the Bitcoin address of the issuer on record\n"
             "  \"creationtxid\" : \"hash\",         (string) the hex-encoded creation transaction hash\n"
             "  \"fixedissuance\" : true|false,    (boolean) whether the token supply is fixed\n"
+            "  \"managedissuance\" : true|false,  (boolean) whether the token supply is managed\n"
+            "  \"uniquetokens\" : true|false,     (boolean) whether the property contains uniquely identifiable tokens\n"
             "  \"totaltokens\" : \"n.nnnnnnnn\"     (string) the total number of tokens in existence\n"
             "}\n"
             "\nExamples:\n"
@@ -927,6 +1066,8 @@ UniValue omni_getproperty(const UniValue& params, bool fHelp)
     response.push_back(Pair("issuer", sp.issuer));
     response.push_back(Pair("creationtxid", strCreationHash));
     response.push_back(Pair("fixedissuance", sp.fixed));
+    response.push_back(Pair("managedissuance", sp.manual));
+    response.push_back(Pair("uniquetokens", sp.unique));
     response.push_back(Pair("totaltokens", strTotalTokens));
 
     return response;
@@ -2187,6 +2328,9 @@ static const CRPCCommand commands[] =
     { "omni layer (data retrieval)", "omni_getfeetrigger",             &omni_getfeetrigger,              false },
     { "omni layer (data retrieval)", "omni_getfeedistribution",        &omni_getfeedistribution,         false },
     { "omni layer (data retrieval)", "omni_getfeedistributions",       &omni_getfeedistributions,        false },
+    { "omni layer (data retrieval)", "omni_getuniquetokens",           &omni_getuniquetokens,            false },
+    { "omni layer (data retrieval)", "omni_getuniquetokenowner",       &omni_getuniquetokenowner,        false },
+    { "omni layer (data retrieval)", "omni_getuniquetokenranges",      &omni_getuniquetokenranges,       false },
 #ifdef ENABLE_WALLET
     { "omni layer (data retrieval)", "omni_listtransactions",          &omni_listtransactions,           false },
     { "omni layer (data retrieval)", "omni_getfeeshare",               &omni_getfeeshare,                false },

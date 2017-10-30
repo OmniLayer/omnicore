@@ -85,6 +85,7 @@ public:
         uint256 update_block;
         bool fixed;
         bool manual;
+        bool unique;
 
         // For crowdsale properties:
         //   txid -> amount invested, crowdsale deadline, user issued tokens, issuer issued tokens
@@ -121,6 +122,7 @@ public:
             READWRITE(update_block);
             READWRITE(fixed);
             READWRITE(manual);
+            READWRITE(unique);
             READWRITE(historicalData);
         }
 
@@ -218,6 +220,7 @@ std::string strEcosystem(uint8_t ecosystem);
 std::string getPropertyName(uint32_t propertyId);
 bool isPropertyDivisible(uint32_t propertyId);
 bool IsPropertyIdValid(uint32_t propertyId);
+bool isPropertyUnique(uint32_t propertyId);
 
 CMPCrowd* getCrowd(const std::string& address);
 

@@ -36,7 +36,7 @@ CMPSPInfo::Entry::Entry()
   : prop_type(0), prev_prop_id(0), num_tokens(0), property_desired(0),
     deadline(0), early_bird(0), percentage(0),
     close_early(false), max_tokens(false), missedTokens(0), timeclosed(0),
-    fixed(false), manual(false) {}
+    fixed(false), manual(false), unique(false) {}
 
 bool CMPSPInfo::Entry::isDivisible() const
 {
@@ -51,10 +51,12 @@ bool CMPSPInfo::Entry::isDivisible() const
 
 void CMPSPInfo::Entry::print() const
 {
-    PrintToConsole("%s:%s(Fixed=%s,Divisible=%s):%d:%s/%s, %s %s\n",
+    PrintToConsole("%s:%s(Fixed=%s,Manual=%s,Unique=%s,Divisible=%s):%d:%s/%s, %s %s\n",
             issuer,
             name,
             fixed ? "Yes" : "No",
+            manual ? "Yes" : "No",
+            unique ? "Yes" : "No",
             isDivisible() ? "Yes" : "No",
             num_tokens,
             category, subcategory, url, data);
@@ -592,6 +594,15 @@ bool mastercore::isPropertyDivisible(uint32_t propertyId)
     return true;
 }
 
+bool mastercore::isPropertyUnique(uint32_t propertyId)
+{
+    CMPSPInfo::Entry sp;
+
+    if (_my_sps->getSP(propertyId, sp)) return sp.unique;
+
+    return false;
+}
+
 std::string mastercore::getPropertyName(uint32_t propertyId)
 {
     CMPSPInfo::Entry sp;
@@ -884,6 +895,7 @@ std::string mastercore::strPropertyType(uint16_t propertyType)
     switch (propertyType) {
         case MSC_PROPERTY_TYPE_DIVISIBLE: return "divisible";
         case MSC_PROPERTY_TYPE_INDIVISIBLE: return "indivisible";
+        case MSC_PROPERTY_TYPE_UNIQUE: return "unique";
     }
 
     return "unknown";

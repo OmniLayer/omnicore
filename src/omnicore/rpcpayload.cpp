@@ -70,6 +70,38 @@ UniValue omni_createpayload_sendall(const UniValue& params, bool fHelp)
     return HexStr(payload.begin(), payload.end());
 }
 
+UniValue omni_createpayload_sendunique(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 3)
+        throw runtime_error(
+            "omni_createpayload_sendunique propertyid uniquetokenstart uniquetokenend \n"
+
+            "\nCreate the payload for a unique send transaction.\n"
+
+            "\nArguments:\n"
+            "1. propertyid           (number, required) the identifier of the tokens to send\n"
+            "2. uniquetokenstart     (number, required) the first token in the range to send\n"
+            "3. uniquetokenend       (number, required) the last token in the range to send\n"
+
+            "\nResult:\n"
+            "\"payload\"               (string) the hex-encoded payload\n"
+
+            "\nExamples:\n"
+            + HelpExampleCli("omni_createpayload_sendunique", "70 1 1000")
+            + HelpExampleRpc("omni_createpayload_sendunique", "70, 1, 1000")
+        );
+
+    uint32_t propertyId = ParsePropertyId(params[0]);
+    int64_t uniqueTokenStart = params[1].get_int64(); // unique tokens are indivisible only
+    int64_t uniqueTokenEnd =  params[2].get_int64();
+
+    RequireSaneUniqueRange(uniqueTokenStart, uniqueTokenEnd);
+
+    std::vector<unsigned char> payload = CreatePayload_SendUnique(propertyId, uniqueTokenStart, uniqueTokenEnd);
+
+    return HexStr(payload.begin(), payload.end());
+}
+
 UniValue omni_createpayload_dexsell(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 6)
@@ -583,6 +615,7 @@ static const CRPCCommand commands[] =
     { "omni layer (payload creation)", "omni_createpayload_canceltradesbyprice", &omni_createpayload_canceltradesbyprice, true },
     { "omni layer (payload creation)", "omni_createpayload_canceltradesbypair",  &omni_createpayload_canceltradesbypair,  true },
     { "omni layer (payload creation)", "omni_createpayload_cancelalltrades",     &omni_createpayload_cancelalltrades,     true },
+    { "omni layer (payload creation)", "omni_createpayload_sendunique",          &omni_createpayload_sendunique,          true },
 };
 
 void RegisterOmniPayloadCreationRPCCommands(CRPCTable &tableRPC)
