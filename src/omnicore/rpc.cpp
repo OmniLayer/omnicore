@@ -2080,34 +2080,45 @@ UniValue omni_gettrade(const UniValue& params, bool fHelp)
 
 UniValue omni_getcurrentconsensushash(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() != 0)
+    if (fHelp || params.size() > 1)
         throw runtime_error(
-            "omni_getcurrentconsensushash\n"
+            "omni_getcurrentconsensushash ( ecosystem )\n"
             "\nReturns the consensus hash for all balances for the current block.\n"
+            "\nArguments:\n"
+            "1. ecosystem                     (number, optional) specify an ecosystem to generate the consensus hash for\n"
             "\nResult:\n"
             "{\n"
-            "  \"block\" : nnnnnn,          (number) the index of the block this consensus hash applies to\n"
+            "  \"block\" : nnnnnn,            (number) the index of the block this consensus hash applies to\n"
             "  \"blockhash\" : \"hash\",      (string) the hash of the corresponding block\n"
+            "  \"ecosystem\" : \"ecosystem\", (string) the ecosystem the hash represents\n"
             "  \"consensushash\" : \"hash\"   (string) the consensus hash for the block\n"
             "}\n"
 
             "\nExamples:\n"
-            + HelpExampleCli("omni_getcurrentconsensushash", "")
-            + HelpExampleRpc("omni_getcurrentconsensushash", "")
+            + HelpExampleCli("omni_getcurrentconsensushash", "1")
+            + HelpExampleRpc("omni_getcurrentconsensushash", "1")
         );
 
-    LOCK(cs_main); // TODO - will this ensure we don't take in a new block in the couple of ms it takes to calculate the consensus hash?
+    LOCK(cs_main);
+
+    uint8_t ecosystem = 0;
+    if (params.size() > 0) {
+        ecosystem = ParseEcosystem(params[0]);
+    }
 
     int block = GetHeight();
 
     CBlockIndex* pblockindex = chainActive[block];
     uint256 blockHash = pblockindex->GetBlockHash();
 
-    uint256 consensusHash = GetConsensusHash();
+    uint256 consensusHash = GetConsensusHash(ecosystem);
 
     UniValue response(UniValue::VOBJ);
     response.push_back(Pair("block", block));
     response.push_back(Pair("blockhash", blockHash.GetHex()));
+    if (ecosystem == 0) response.push_back(Pair("ecosystem", "both"));
+    if (ecosystem == 1) response.push_back(Pair("ecosystem", "main"));
+    if (ecosystem == 2) response.push_back(Pair("ecosystem", "test"));
     response.push_back(Pair("consensushash", consensusHash.GetHex()));
 
     return response;
@@ -2115,30 +2126,37 @@ UniValue omni_getcurrentconsensushash(const UniValue& params, bool fHelp)
 
 UniValue omni_getmetadexhash(const UniValue& params, bool fHelp)
 {
-    if (fHelp || params.size() > 1)
+    if (fHelp || params.size() > 2)
         throw runtime_error(
-            "omni_getmetadexhash propertyId\n"
+            "omni_getmetadexhash ( ecosystem propertyId ) \n"
             "\nReturns a hash of the current state of the MetaDEx (default) or orderbook.\n"
             "\nArguments:\n"
-            "1. propertyid                  (number, optional) hash orderbook (only trades selling propertyid)\n"
+            "1. ecosystem                     (number, optional) specify an ecosystem to generate the consensus hash for\n"
+            "2. propertyid                    (number, optional) hash orderbook (only trades selling propertyid)\n"
             "\nResult:\n"
             "{\n"
-            "  \"block\" : nnnnnn,          (number) the index of the block this hash applies to\n"
-            "  \"blockhash\" : \"hash\",    (string) the hash of the corresponding block\n"
-            "  \"propertyid\" : nnnnnn,     (number) the market this hash applies to (or 0 for all markets)\n"
-            "  \"metadexhash\" : \"hash\"   (string) the hash for the state of the MetaDEx/orderbook\n"
+            "  \"block\" : nnnnnn,            (number) the index of the block this hash applies to\n"
+            "  \"blockhash\" : \"hash\",      (string) the hash of the corresponding block\n"
+            "  \"ecosystem\" : \"ecosystem\", (string) the ecosystem the hash represents\n"
+            "  \"propertyid\" : nnnnnn,       (number) the market this hash applies to (or 0 for all markets)\n"
+            "  \"metadexhash\" : \"hash\"     (string) the hash for the state of the MetaDEx/orderbook\n"
             "}\n"
 
             "\nExamples:\n"
-            + HelpExampleCli("omni_getmetadexhash", "3")
-            + HelpExampleRpc("omni_getmetadexhash", "3")
+            + HelpExampleCli("omni_getmetadexhash", "1 3")
+            + HelpExampleRpc("omni_getmetadexhash", "1, 3")
         );
 
     LOCK(cs_main);
 
-    uint32_t propertyId = 0;
+    uint8_t ecosystem = 0;
     if (params.size() > 0) {
-        propertyId = ParsePropertyId(params[0]);
+        ecosystem = ParseEcosystem(params[0]);
+    }
+
+    uint32_t propertyId = 0;
+    if (params.size() > 1) {
+        propertyId = ParsePropertyId(params[1]);
         RequireExistingProperty(propertyId);
     }
 
@@ -2146,11 +2164,14 @@ UniValue omni_getmetadexhash(const UniValue& params, bool fHelp)
     CBlockIndex* pblockindex = chainActive[block];
     uint256 blockHash = pblockindex->GetBlockHash();
 
-    uint256 metadexHash = GetMetaDExHash(propertyId);
+    uint256 metadexHash = GetMetaDExHash(ecosystem, propertyId);
 
     UniValue response(UniValue::VOBJ);
     response.push_back(Pair("block", block));
     response.push_back(Pair("blockhash", blockHash.GetHex()));
+    if (ecosystem == 0) response.push_back(Pair("ecosystem", "both"));
+    if (ecosystem == 1) response.push_back(Pair("ecosystem", "main"));
+    if (ecosystem == 2) response.push_back(Pair("ecosystem", "test"));
     response.push_back(Pair("propertyid", (uint64_t)propertyId));
     response.push_back(Pair("metadexhash", metadexHash.GetHex()));
 

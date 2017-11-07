@@ -147,7 +147,7 @@ std::string GenerateConsensusString(const uint32_t propertyId, const std::string
  *   SHA256("abc") = "ad1500f261ff10b49c7a1796a36103b02322ae5dde404141eacf018fbf1678ba"
  *
  */
-uint256 GetConsensusHash()
+uint256 GetConsensusHash(uint8_t ecosystem)
 {
     // allocate and init a SHA256_CTX
     SHA256_CTX shaCtx;
@@ -155,7 +155,7 @@ uint256 GetConsensusHash()
 
     LOCK(cs_tally);
 
-    if (msc_debug_consensus_hash) PrintToLog("Beginning generation of current consensus hash...\n");
+    if (msc_debug_consensus_hash) PrintToLog("Beginning generation of current (eco=%d) consensus hash...\n", ecosystem);
 
     // Balances - loop through the tally map, updating the sha context with the data from each balance and tally type
     // Placeholders:  "address|propertyid|balance|selloffer_reserve|accept_reserve|metadex_reserve"
@@ -170,6 +170,8 @@ uint256 GetConsensusHash()
         tally.init();
         uint32_t propertyId = 0;
         while (0 != (propertyId = (tally.next()))) {
+            if (ecosystem == 1 && isTestEcosystemProperty(propertyId)) continue;
+            if (ecosystem == 2 && !isTestEcosystemProperty(propertyId)) continue;
             std::string dataStr = GenerateConsensusString(tally, address, propertyId);
             if (dataStr.empty()) continue; // skip empty balances
             if (msc_debug_consensus_hash) PrintToLog("Adding balance data to consensus hash: %s\n", dataStr);
@@ -182,6 +184,8 @@ uint256 GetConsensusHash()
     std::vector<std::pair<arith_uint256, std::string> > vecDExOffers;
     for (OfferMap::iterator it = my_offers.begin(); it != my_offers.end(); ++it) {
         const CMPOffer& selloffer = it->second;
+        if (ecosystem == 1 && isTestEcosystemProperty(selloffer.getProperty())) continue;
+        if (ecosystem == 2 && !isTestEcosystemProperty(selloffer.getProperty())) continue;
         const std::string& sellCombo = it->first;
         std::string seller = sellCombo.substr(0, sellCombo.size() - 2);
         std::string dataStr = GenerateConsensusString(selloffer, seller);
@@ -199,6 +203,8 @@ uint256 GetConsensusHash()
     std::vector<std::pair<std::string, std::string> > vecAccepts;
     for (AcceptMap::const_iterator it = my_accepts.begin(); it != my_accepts.end(); ++it) {
         const CMPAccept& accept = it->second;
+        if (ecosystem == 1 && isTestEcosystemProperty(accept.getProperty())) continue;
+        if (ecosystem == 2 && !isTestEcosystemProperty(accept.getProperty())) continue;
         const std::string& acceptCombo = it->first;
         std::string buyer = acceptCombo.substr((acceptCombo.find("+") + 1), (acceptCombo.size()-(acceptCombo.find("+") + 1)));
         std::string dataStr = GenerateConsensusString(accept, buyer);
@@ -216,6 +222,9 @@ uint256 GetConsensusHash()
     // Placeholders: "txid|address|propertyidforsale|amountforsale|propertyiddesired|amountdesired|amountremaining"
     std::vector<std::pair<arith_uint256, std::string> > vecMetaDExTrades;
     for (md_PropertiesMap::const_iterator my_it = metadex.begin(); my_it != metadex.end(); ++my_it) {
+        uint32_t propertyId = my_it->first;
+        if (ecosystem == 1 && isTestEcosystemProperty(propertyId)) continue;
+        if (ecosystem == 2 && !isTestEcosystemProperty(propertyId)) continue;
         const md_PricesMap& prices = my_it->second;
         for (md_PricesMap::const_iterator it = prices.begin(); it != prices.end(); ++it) {
             const md_Set& indexes = it->second;
@@ -241,6 +250,8 @@ uint256 GetConsensusHash()
     for (CrowdMap::const_iterator it = my_crowds.begin(); it != my_crowds.end(); ++it) {
         const CMPCrowd& crowd = it->second;
         uint32_t propertyId = crowd.getPropertyId();
+        if (ecosystem == 1 && isTestEcosystemProperty(propertyId)) continue;
+        if (ecosystem == 2 && !isTestEcosystemProperty(propertyId)) continue;
         std::string dataStr = GenerateConsensusString(crowd);
         vecCrowds.push_back(std::make_pair(propertyId, dataStr));
     }
@@ -255,9 +266,10 @@ uint256 GetConsensusHash()
     // Note: we are loading every SP from the DB to check the issuer, if using consensus_hash_every_block debug option this
     //       will slow things down dramatically.  Not an issue to do it once every 10,000 blocks for checkpoint verification.
     // Placeholders: "propertyid|issueraddress"
-    for (uint8_t ecosystem = 1; ecosystem <= 2; ecosystem++) {
-        uint32_t startPropertyId = (ecosystem == 1) ? 1 : TEST_ECO_PROPERTY_1;
-        for (uint32_t propertyId = startPropertyId; propertyId < _my_sps->peekNextSPID(ecosystem); propertyId++) {
+    for (uint8_t eco = 1; eco <= 2; eco++) {
+        if (ecosystem != 0 && ecosystem != eco) continue;
+        uint32_t startPropertyId = (eco == 1) ? 1 : TEST_ECO_PROPERTY_1;
+        for (uint32_t propertyId = startPropertyId; propertyId < _my_sps->peekNextSPID(eco); propertyId++) {
             CMPSPInfo::Entry sp;
             if (!_my_sps->getSP(propertyId, sp)) {
                 PrintToLog("Error loading property ID %d for consensus hashing, hash should not be trusted!\n");
@@ -277,7 +289,7 @@ uint256 GetConsensusHash()
     return consensusHash;
 }
 
-uint256 GetMetaDExHash(const uint32_t propertyId)
+uint256 GetMetaDExHash(uint8_t ecosystem, const uint32_t propertyId)
 {
     SHA256_CTX shaCtx;
     SHA256_Init(&shaCtx);
@@ -286,7 +298,10 @@ uint256 GetMetaDExHash(const uint32_t propertyId)
 
     std::vector<std::pair<arith_uint256, std::string> > vecMetaDExTrades;
     for (md_PropertiesMap::const_iterator my_it = metadex.begin(); my_it != metadex.end(); ++my_it) {
-        if (propertyId == 0 || propertyId == my_it->first) {
+        uint32_t prop = my_it->first;
+        if (ecosystem == 1 && isTestEcosystemProperty(prop)) continue;
+        if (ecosystem == 2 && !isTestEcosystemProperty(prop)) continue;
+        if (propertyId == 0 || propertyId == prop) {
             const md_PricesMap& prices = my_it->second;
             for (md_PricesMap::const_iterator it = prices.begin(); it != prices.end(); ++it) {
                 const md_Set& indexes = it->second;
