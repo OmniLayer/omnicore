@@ -2009,6 +2009,11 @@ int CMPTransaction::logicMath_RevokeTokens()
         PrintToLog("%s(): rejected: property %d is not managed\n", __func__, property);
         return (PKT_ERROR_TOKENS -42);
     }
+    
+    if (sender != sp.issuer) {
+        PrintToLog("%s(): rejected: sender %s is not issuer of property %d [issuer=%s]\n", __func__, sender, property, sp.issuer);
+        return (PKT_ERROR_TOKENS -43);
+    }
 
     int64_t nBalance = getMPbalance(sender, property, BALANCE);
     if (nBalance < (int64_t) nValue) {
