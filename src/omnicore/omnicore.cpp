@@ -844,7 +844,8 @@ static int parseTransaction(bool bRPConly, const CTransaction& wtx, int nBlock, 
     int64_t inAll = 0;
 
     { // needed to ensure the cache isn't cleared in the meantime when doing parallel queries
-    LOCK(cs_tx_cache);
+    //LOCK(cs_tx_cache);
+    LOCK2(cs_main,cs_tx_cache); // cs_main should be locked first to avoid deadlocks with cs_tx_cache at FillTxInputCache(...)->GetTransaction(...)->LOCK(cs_main)
 
     // Add previous transaction inputs to the cache
     if (!FillTxInputCache(wtx)) {
