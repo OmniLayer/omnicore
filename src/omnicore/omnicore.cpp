@@ -1297,11 +1297,17 @@ static bool HandleDExPayments(const CTransaction& tx, int nBlock, const std::str
 
     for (unsigned int n = 0; n < tx.vout.size(); ++n) {
         CTxDestination dest;
+        CBitcoinAddress sender(strSender);
         if (ExtractDestination(tx.vout[n].scriptPubKey, dest)) {
             CBitcoinAddress address(dest);
             if (address == ExodusAddress()) {
                 continue;
             }
+           
+            if (address == sender) {
+                continue;
+            }
+            
             std::string strAddress = address.ToString();
             if (msc_debug_parser_dex) PrintToLog("payment #%d %s %s\n", count, strAddress, FormatIndivisibleMP(tx.vout[n].nValue));
 
