@@ -99,7 +99,7 @@ static const char* FEE_ESTIMATES_FILENAME="fee_estimates.dat";
 // Omni Core initialization and shutdown handlers
 extern int mastercore_init();
 extern int mastercore_shutdown();
-extern int CheckWalletUpdate(bool forceUpdate = false);
+extern void CheckWalletUpdate(bool forceUpdate = false);
 
 /**
  * The PID file facilities.
