@@ -25,8 +25,9 @@ extern CFeeRate minRelayTxFee;
 int64_t OmniGetDustThreshold(const CScript& scriptPubKey)
 {
     CTxOut txOut(0, scriptPubKey);
+    CFeeRate lowest_standard_fee(1000);
 
-    return GetDustThreshold(txOut, minRelayTxFee) * 3;
+    return GetDustThreshold(txOut, lowest_standard_fee) * 3;
 }
 
 /**
