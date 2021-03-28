@@ -25,9 +25,9 @@ class Coin;
 #include <set>
 #include <unordered_map>
 
-// Keep the state of the last 50 blocks to roll back quickly
+// Keep the state of the last 200 blocks to roll back quickly
 // in case of a block reorganization
-int const MAX_STATE_HISTORY = 50;
+int const MAX_STATE_HISTORY = 200;
 // Also store the state every 5000 blocks to be able to recover
 // from a crash or shutdown during reparse more quickly
 int const STORE_EVERY_N_BLOCK = 5000;
