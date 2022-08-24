@@ -2477,6 +2477,7 @@ int CMPTransaction::logicMath_RevokeTokens(CBlockIndex* pindex)
         return (PKT_ERROR_TOKENS -22);
     }
 
+
     if (isPropertyNonFungible(property)) {
         PrintToLog("%s(): rejected: property %d is of type non-fungible\n", __func__, property);
         return (PKT_ERROR_NFT -21);
@@ -2546,9 +2547,11 @@ int CMPTransaction::logicMath_ChangeIssuer(CBlockIndex* pindex)
         return (PKT_ERROR_TOKENS -22);
     }
 
-    if (isPropertyNonFungible(property)) {
-        PrintToLog("%s(): rejected: property %d is of type non-fungible\n", __func__, property);
-        return (PKT_ERROR_NFT -21);
+    if (!IsFeatureActivated(FEATURE_NONFUNGIBLE_ISSUER, block)) {
+        if (isPropertyNonFungible(property)) {
+            PrintToLog("%s(): rejected: property %d is of type non-fungible\n", __func__, property);
+            return (PKT_ERROR_NFT -21);
+        }
     }
 
     if (!IsPropertyIdValid(property)) {

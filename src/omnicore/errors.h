@@ -376,7 +376,7 @@ inline std::string error_str(int ec) {
           ec_str = "Sender has insufficient balance of property";
           break;
       case PKT_ERROR_NFT -33:
-          ec_str = "Sender %s does not own the range being sent";
+          ec_str = "Sender does not own the range being sent";
           break;
 
       default:
