@@ -80,7 +80,7 @@ std::vector<TransactionRestriction> CConsensusParams::GetRestrictions() const
         { MSC_TYPE_SEND_NONFUNGIBLE,          MP_TX_PKT_V0,  false,   MSC_NONFUNGIBLE_BLOCK  },
         { MSC_TYPE_NONFUNGIBLE_DATA,          MP_TX_PKT_V0,  false,   MSC_NONFUNGIBLE_BLOCK  },
 
-        { MSC_TYPE_SEND_TO_MANY,              MP_TX_PKT_V0,  false,   MSC_SEND_TO_MANY_BLOCK  },
+        { MSC_TYPE_SEND_TO_MANY,              MP_TX_PKT_V0,  false,   MSC_SEND_TO_MANY_NFT_FIX_BLOCK  },
     };
 
     const size_t nSize = sizeof(vTxRestrictions) / sizeof(vTxRestrictions[0]);
@@ -257,7 +257,7 @@ CMainConsensusParams::CMainConsensusParams()
     MSC_ANYDATA_BLOCK = 0;
     MSC_NONFUNGIBLE_BLOCK = 999999;
     MSC_DELEGATED_ISSUANCE_BLOCK = 999999;
-    MSC_SEND_TO_MANY_BLOCK = 999999;
+    MSC_SEND_TO_MANY_NFT_FIX_BLOCK = 999999;
     // Other feature activations:
     GRANTEFFECTS_FEATURE_BLOCK = 394500;
     DEXMATH_FEATURE_BLOCK = 395000;
@@ -266,7 +266,6 @@ CMainConsensusParams::CMainConsensusParams()
     FEES_FEATURE_BLOCK = 999999;
     FREEZENOTICE_FEATURE_BLOCK = 999999;
     FREEDEX_FEATURE_BLOCK = 999999;
-    NONFUNGIBLETOKEN_ISSUER_DATA = 999999;
 }
 
 /**
@@ -304,7 +303,7 @@ CTestNetConsensusParams::CTestNetConsensusParams()
     MSC_ANYDATA_BLOCK = 0;
     MSC_NONFUNGIBLE_BLOCK = 0;
     MSC_DELEGATED_ISSUANCE_BLOCK = 0;
-    MSC_SEND_TO_MANY_BLOCK = 0;
+    MSC_SEND_TO_MANY_NFT_FIX_BLOCK = 0;
     // Other feature activations:
     GRANTEFFECTS_FEATURE_BLOCK = 0;
     DEXMATH_FEATURE_BLOCK = 0;
@@ -313,7 +312,6 @@ CTestNetConsensusParams::CTestNetConsensusParams()
     FEES_FEATURE_BLOCK = 0;
     FREEZENOTICE_FEATURE_BLOCK = 0;
     FREEDEX_FEATURE_BLOCK = 0;
-    NONFUNGIBLETOKEN_ISSUER_DATA = 0;
 }
 
 /**
@@ -351,7 +349,7 @@ CRegTestConsensusParams::CRegTestConsensusParams()
     MSC_ANYDATA_BLOCK = 0;
     MSC_NONFUNGIBLE_BLOCK = 0;
     MSC_DELEGATED_ISSUANCE_BLOCK = 0;
-    MSC_SEND_TO_MANY_BLOCK = 0;
+    MSC_SEND_TO_MANY_NFT_FIX_BLOCK = 0;
     // Other feature activations:
     GRANTEFFECTS_FEATURE_BLOCK = 999999;
     DEXMATH_FEATURE_BLOCK = 999999;
@@ -360,7 +358,6 @@ CRegTestConsensusParams::CRegTestConsensusParams()
     FEES_FEATURE_BLOCK = 999999;
     FREEZENOTICE_FEATURE_BLOCK = 999999;
     FREEDEX_FEATURE_BLOCK = 999999;
-    NONFUNGIBLETOKEN_ISSUER_DATA = 999999;
 }
 
 //! Consensus parameters for mainnet
@@ -532,14 +529,11 @@ bool ActivateFeature(uint16_t featureId, int activationBlock, uint32_t minClient
         case FEATURE_NONFUNGIBLE:
             MutableConsensusParams().MSC_NONFUNGIBLE_BLOCK = activationBlock;
         break;
-        case FEATURE_NONFUNGIBLE_ISSUER:
-            MutableConsensusParams().NONFUNGIBLETOKEN_ISSUER_DATA = activationBlock;
-        break;
         case FEATURE_DELEGATEDISSUANCE:
             MutableConsensusParams().MSC_DELEGATED_ISSUANCE_BLOCK = activationBlock;
         break;
-        case FEATURE_SEND_TO_MANY:
-            MutableConsensusParams().MSC_SEND_TO_MANY_BLOCK = activationBlock;
+        case FEATURE_SEND_TO_MANY_NFT_FIX:
+            MutableConsensusParams().MSC_SEND_TO_MANY_NFT_FIX_BLOCK = activationBlock;
         break;
         default:
             supported = false;
@@ -618,14 +612,11 @@ bool DeactivateFeature(uint16_t featureId, int transactionBlock)
         case FEATURE_NONFUNGIBLE:
             MutableConsensusParams().MSC_NONFUNGIBLE_BLOCK = 999999;
         break;
-        case FEATURE_NONFUNGIBLE_ISSUER:
-            MutableConsensusParams().NONFUNGIBLETOKEN_ISSUER_DATA = 999999;
-        break;
         case FEATURE_DELEGATEDISSUANCE:
             MutableConsensusParams().MSC_DELEGATED_ISSUANCE_BLOCK = 999999;
         break;
-        case FEATURE_SEND_TO_MANY:
-            MutableConsensusParams().MSC_SEND_TO_MANY_BLOCK = 999999;
+        case FEATURE_SEND_TO_MANY_NFT_FIX:
+            MutableConsensusParams().MSC_SEND_TO_MANY_NFT_FIX_BLOCK = 999999;
         break;
         default:
             return false;
@@ -660,9 +651,8 @@ std::string GetFeatureName(uint16_t featureId)
         case FEATURE_FREEZENOTICE: return "Activate the waiting period for enabling freezing";
         case FEATURE_FREEDEX: return "Activate trading of any token on the distributed exchange";
         case FEATURE_NONFUNGIBLE: return "Uniquely identifiable tokens";
-        case FEATURE_NONFUNGIBLE_ISSUER: return "NFT issuer data update by issuers only";
         case FEATURE_DELEGATEDISSUANCE: return "Activate delegated issuance of tokens";
-        case FEATURE_SEND_TO_MANY: return "Activate send-to-many transactions";
+        case FEATURE_SEND_TO_MANY_NFT_FIX: return "Activate send-to-many transactions";
 
         default: return "Unknown feature";
     }
@@ -716,14 +706,11 @@ bool IsFeatureActivated(uint16_t featureId, int transactionBlock)
         case FEATURE_NONFUNGIBLE:
             activationBlock = params.MSC_NONFUNGIBLE_BLOCK;
         break;
-        case FEATURE_NONFUNGIBLE_ISSUER:
-            activationBlock = params.NONFUNGIBLETOKEN_ISSUER_DATA;
-            break;
         case FEATURE_DELEGATEDISSUANCE:
             activationBlock = params.MSC_DELEGATED_ISSUANCE_BLOCK;
         break;
-        case FEATURE_SEND_TO_MANY:
-            activationBlock = params.MSC_SEND_TO_MANY_BLOCK;
+        case FEATURE_SEND_TO_MANY_NFT_FIX:
+            activationBlock = params.MSC_SEND_TO_MANY_NFT_FIX_BLOCK;
         break;
         default:
             return false;
