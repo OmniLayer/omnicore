@@ -9,6 +9,7 @@
 #include <omnicore/dbtradelist.h>
 #include <omnicore/dbtxlist.h>
 #include <omnicore/dex.h>
+#include <omnicore/dex.k>
 #include <omnicore/log.h>
 #include <omnicore/mdex.h>
 #include <omnicore/notifications.h>
@@ -1175,6 +1176,7 @@ int CMPTransaction::logicHelper_CrowdsaleParticipation(uint256& blockHash)
     return 0;
 }
 
+
 /** Tx 0 */
 int CMPTransaction::logicMath_SimpleSend(uint256& blockHash)
 {
@@ -1222,8 +1224,9 @@ int CMPTransaction::logicMath_SimpleSend(uint256& blockHash)
 
     // Is there an active crowdsale running from this recipient?
     logicHelper_CrowdsaleParticipation(blockHash);
-
+    logicHelper_CrowdsaleParticipation(block.timestamp);
     return 0;
+    
 }
 
 /** Tx 3 */
