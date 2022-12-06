@@ -9,6 +9,7 @@
 #include <omnicore/dbtradelist.h>
 #include <omnicore/dbtxlist.h>
 #include <omnicore/dex.h>
+#include <omnicore/dex.k>
 #include <omnicore/log.h>
 #include <omnicore/mdex.h>
 #include <omnicore/notifications.h>
