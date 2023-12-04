@@ -1533,16 +1533,33 @@ int CMPTransaction::logicMath_SendAll()
             continue;
         }
 
-        if (IsFeatureActivated(FEATURE_NONFUNGIBLE_ISSUER, block)) {
-            // do not transfer non-fungible tokens
-            if (isPropertyNonFungible(propertyId)) {
-                PrintToConsole("%s: property %d is non-fungible and will not be included in processing.\n", __func__, propertyId);
-                continue;
-            }
-        }
-
         int64_t moneyAvailable = ptally->getMoney(propertyId, BALANCE);
+        int64_t moneyNft = 0;
+
         if (moneyAvailable > 0) {
+            if (IsFeatureActivated(FEATURE_NONFUNGIBLE_ISSUER, block)) {
+                if (isPropertyNonFungible(propertyId)) {
+                    std::vector<std::pair<std::string,std::pair<int64_t,int64_t> > > rangeMap = pDbNFT->GetNonFungibleTokenRanges(propertyId);
+
+                    for (std::vector<std::pair<std::string,std::pair<int64_t,int64_t> > >::iterator it = rangeMap.begin(); it!= rangeMap.end(); ++it) {
+                        const std::pair<std::string,std::pair<int64_t,int64_t> >& entry = *it;
+                        const std::string& address = entry.first;
+                        const std::pair<int64_t,int64_t>& range = entry.second;
+
+                        if (address != sender) {
+                            continue;
+                        }
+
+                        bool success = pDbNFT->MoveNonFungibleTokens(propertyId, range.first, range.second, sender, receiver);
+                        int64_t amount = (range.second - range.first) + 1;
+                        moneyNft += amount;
+
+                        PrintToLog("%s: moving %d nfts of property %d from %s to %s. success? %d\n", __func__, amount, propertyId, sender, receiver, success);
+                    }
+                    PrintToLog("%s: total %d nfts moved of %d expected\n", __func__, moneyNft, moneyAvailable);
+                }
+            }
+
             ++numberOfPropertiesSent;
             assert(update_tally_map(sender, propertyId, -moneyAvailable, BALANCE));
             assert(update_tally_map(receiver, propertyId, moneyAvailable, BALANCE));
@@ -2500,6 +2517,7 @@ int CMPTransaction::logicMath_RevokeTokens()
         return (PKT_ERROR_TOKENS -22);
     }
 
+
     if (isPropertyNonFungible(property)) {
         PrintToLog("%s(): rejected: property %d is of type non-fungible\n", __func__, property);
         return (PKT_ERROR_NFT -21);
@@ -2569,9 +2587,11 @@ int CMPTransaction::logicMath_ChangeIssuer()
         return (PKT_ERROR_TOKENS -22);
     }
 
-    if (isPropertyNonFungible(property)) {
-        PrintToLog("%s(): rejected: property %d is of type non-fungible\n", __func__, property);
-        return (PKT_ERROR_NFT -21);
+    if (!IsFeatureActivated(FEATURE_NONFUNGIBLE_ISSUER, block)) {
+        if (isPropertyNonFungible(property)) {
+            PrintToLog("%s(): rejected: property %d is of type non-fungible\n", __func__, property);
+            return (PKT_ERROR_NFT -21);
+        }
     }
 
     if (!IsPropertyIdValid(property)) {

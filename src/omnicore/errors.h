@@ -343,7 +343,7 @@ inline std::string error_str(int ec) {
           ec_str = "Non-fungible tokens are not yet activated";
           break;
       case PKT_ERROR_NFT -21:
-          ec_str = "Property %d is of type non-fungible";
+          ec_str = "Property is of type non-fungible";
           break;
       case PKT_ERROR_NFT -23:
           ec_str = "Type or version not permitted for property";
@@ -376,7 +376,7 @@ inline std::string error_str(int ec) {
           ec_str = "Sender has insufficient balance of property";
           break;
       case PKT_ERROR_NFT -33:
-          ec_str = "Sender %s does not own the range being sent";
+          ec_str = "Sender does not own the range being sent";
           break;
       case MP_TX_IS_NOT_OMNI_PROTOCOL:
           ec_str = "No Omni layer transaction";
