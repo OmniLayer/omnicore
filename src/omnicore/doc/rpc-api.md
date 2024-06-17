@@ -190,7 +190,7 @@ Place, update or cancel a sell offer on the distributed token/BTC exchange.
 **Example:**
 
 ```bash
-$ omnicore-cli "omni_senddexsell" "37FaKponF7zqoMLUjEiko25pDiuVH5YLEa" 1 "1.5" "0.75" 25 "0.0001" 1
+$ omnicore-cli "omni_senddexsell" "1bq5czbvxjuzlt3sjr8ecqv3v4xaxnjzzx" 1 "1.5" "0.75" 25 "0.0001" 1
 ```
 
 ---
