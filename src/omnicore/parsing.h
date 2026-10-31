@@ -1,6 +1,7 @@
 #ifndef BITCOIN_OMNICORE_PARSING_H
 #define BITCOIN_OMNICORE_PARSING_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
