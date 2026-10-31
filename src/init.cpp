@@ -1583,7 +1583,10 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         }
     }
 
-    mastercore_init(node);
+    if (mastercore_init(node) != 0) {
+        // mastercore_init() reports the reason via InitError()
+        return false;
+    }
 
     // ********************************************************* Step 10: data directory maintenance
 
