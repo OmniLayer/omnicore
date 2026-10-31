@@ -610,7 +610,7 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-omniseedblockfilter", "Set skipping of blocks without Omni transactions during initial scan (default: 1)", false, OptionsCategory::OMNI);
     argsman.AddArg("-omniskipstoringstate", "Don't store state during initial synchronization until block n (faster, but may have to restart syncing after a shutdown)(default: 770000)", false, OptionsCategory::OMNI);
     argsman.AddArg("-omnilogfile", "The path of the log file (default: omnicore.log)", false, OptionsCategory::OMNI);
-    argsman.AddArg("-omnidebug=<category>", "Enable or disable log categories, can be \"all\" or \"none\"", false, OptionsCategory::OMNI);
+    argsman.AddArg("-omnidebug=<category>", "Enable an Omni log category in addition to the compiled defaults, or \"all\" / \"none\" to set every category. Repeatable; values are applied in order (see src/omnicore/doc/debug.md)", false, OptionsCategory::OMNI);
     argsman.AddArg("-autocommit", "Enable or disable broadcasting of transactions, when creating transactions (default: 1)", false, OptionsCategory::OMNI);
     argsman.AddArg("-overrideforcedshutdown", "Overwrite shutdown, triggered by an alert (default: 0)", false, OptionsCategory::OMNI);
     argsman.AddArg("-omnialertallowsender", "Whitelist senders of alerts, can be \"any\")", false, OptionsCategory::OMNI);
