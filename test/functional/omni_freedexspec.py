@@ -13,6 +13,10 @@ class OmniFreeDExSpec(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.extra_args = [['-omniactivationallowsender=any']]
 
+    def skip_test_if_missing_module(self):
+        # The test creates a legacy wallet (descriptors=False), which needs BDB
+        self.skip_if_no_bdb()
+
     def run_test(self):
         self.log.info("test dex spec using free dex")
 
