@@ -51,7 +51,11 @@ More information about the general configuration and Bitcoin Core specific optio
 | Name                         | Type         | Default        | Description                                                                     |
 |------------------------------|--------------|----------------|---------------------------------------------------------------------------------|
 | `omnilogfile`                | string       | `omnicore.log` | the path of the log file (in the data directory per default)                    |
-| `omnidebug`                  | multi string | `""`           | enable or disable log categories, can be `"all"`, `"none"`                      |
+| `omnidebug`                  | multi string | `""`           | enable or disable log categories; see [Debug log categories](debug.md)          |
+
+When `-omnidebug` is omitted, the compiled defaults in [debug.md](debug.md) are kept. The option may be repeated on the command line or in `bitcoin.conf`. A category name turns that category on and leaves the others unchanged. `"none"` turns every category off, and `"all"` turns every category on. Values are applied in the order given, so `-omnidebug=none -omnidebug=parser` leaves only `parser` enabled.
+
+Omni log lines are written to `omnicore.log` (or `-omnilogfile`). With `-printtoconsole`, they are written to standard output instead of that file.
 
 #### Transaction options:
 
