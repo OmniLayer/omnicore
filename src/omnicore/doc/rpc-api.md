@@ -134,6 +134,10 @@ The RPCs for transaction creation can be used to create and broadcast Omni Proto
 
 A hash of the broadcasted transaction is returned as result.
 
+`redeemaddress`, where accepted, is the address whose public key can redeem Class B (bare multisig) data outputs. Change is always returned to the sender, and the reference output is paid to the receiver, if any. The parameter does not select either of those outputs, and providing it does not force a Class B transaction.
+
+Class C (`OP_RETURN`) is the default whenever the payload fits in the data carrier (`-datacarrier` / `-datacarriersize`) and `OP_RETURN` outputs are allowed. For Class C the parameter is validated, but has no effect. The fixed payloads built by `omni_send`, `omni_sendall`, `omni_sendsto`, and `omni_sendnonfungible` fit in the default data carrier, so `redeemaddress` has no effect on those calls unless Class C is disabled or the data-carrier limit is reduced below the payload size. `omni_sendrawtx` uses the supplied payload and consults `redeemaddress` only when that payload falls back to Class B.
+
 ### omni_send
 
 Create and broadcast a simple send transaction.
@@ -146,7 +150,7 @@ Create and broadcast a simple send transaction.
 | `toaddress`         | string  | required | the address of the receiver                                                                  |
 | `propertyid`        | number  | required | the identifier of the tokens to send                                                         |
 | `amount`            | string  | required | the amount to send                                                                           |
-| `redeemaddress`     | string  | optional | an address that can spend the transaction dust (sender by default)                           |
+| `redeemaddress`     | string  | optional | Class B redeem address (sender by default); validated, but has no effect for Class C         |
 | `referenceamount`   | string  | optional | a bitcoin amount that is sent to the receiver (minimal by default)                           |
 
 **Result:**
@@ -173,7 +177,7 @@ Transfers all available tokens in the given ecosystem to the recipient.
 | `fromaddress`       | string  | required | the address to send from                                                                     |
 | `toaddress  `       | string  | required | the address of the receiver                                                                  |
 | `ecosystem`         | number  | required | the ecosystem of the tokens to send (`1` for main ecosystem, `2` for test ecosystem)         |
-| `redeemaddress`     | string  | optional | an address that can spend the transaction dust (sender by default)                           |
+| `redeemaddress`     | string  | optional | Class B redeem address (sender by default); validated, but has no effect for Class C         |
 | `referenceamount`   | string  | optional | a bitcoin amount that is sent to the receiver (minimal by default)                           |
 
 **Result:**
@@ -501,7 +505,7 @@ Create and broadcast a send-to-owners transaction.
 | `fromaddress`          | string  | required | the address to send from                                                                     |
 | `propertyid`           | number  | required | the identifier of the tokens to distribute                                                   |
 | `amount`               | string  | required | the amount to distribute                                                                     |
-| `redeemaddress`        | string  | optional | an address that can spend the transaction dust (sender by default)                           |
+| `redeemaddress`        | string  | optional | Class B redeem address (sender by default); validated, but has no effect for Class C         |
 | `distributionproperty` | number  | optional | the identifier of the property holders to distribute to                                      |
 
 **Result:**
@@ -922,7 +926,7 @@ Broadcasts a raw Omni Layer transaction.
 | `fromaddress`       | string  | required | the address to send from                                                                     |
 | `rawtransaction`    | string  | required | the hex-encoded raw transaction                                                              |
 | `referenceaddress`  | string  | optional | a reference address (none by default)                                                        |
-| `redeemaddress`     | string  | optional | an address that can spend the transaction dust (sender by default)                           |
+| `redeemaddress`     | string  | optional | Class B redeem address (sender by default); validated, but has no effect for Class C         |
 | `referenceamount`   | string  | optional | a bitcoin amount that is sent to the receiver (minimal by default)                           |
 
 **Result:**
@@ -1013,7 +1017,7 @@ Create and broadcast a non-fungible send transaction.
 | `propertyid`        | number  | required | the identifier of the tokens to send                                                         |
 | `tokenstart`        | number  | required | the first token in the range to send                                                         |
 | `tokenend`          | number  | required | the last token in the range to send                                                          |
-| `redeemaddress`     | string  | optional | an address that can spend the transaction dust (sender by default)                           |
+| `redeemaddress`     | string  | optional | Class B redeem address (sender by default); validated, but has no effect for Class C         |
 | `referenceamount`   | string  | optional | a bitcoin amount that is sent to the receiver (minimal by default)                           |
 
 **Result:**
