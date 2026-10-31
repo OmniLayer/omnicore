@@ -1051,7 +1051,8 @@ static int parseTransaction(bool bRPConly, CCoinsViewCache& view, const CTransac
             packet_size = PACKET_SIZE_CLASS_A;
             memcpy(single_pkt, &ParseHex(strScriptData)[0], packet_size);
         } else {
-            if ((!bRPConly || msc_debug_parser_readonly) && msc_debug_parser_dex) {
+            // Mostly hit by Exodus fundraiser purchases, so only log it with the parser_data category (#272)
+            if ((!bRPConly || msc_debug_parser_readonly) && msc_debug_parser_data) {
                 PrintToLog("!! sender: %s , receiver: %s\n", strSender, strReference);
                 PrintToLog("!! this may be the BTC payment for an offer !!\n");
             }
