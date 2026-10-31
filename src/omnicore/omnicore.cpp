@@ -63,6 +63,7 @@
 #include <util/system.h>
 #include <util/strencodings.h>
 #include <util/time.h>
+#include <util/translation.h>
 #include <validationinterface.h>
 #ifdef ENABLE_WALLET
 #include <wallet/ismine.h>
@@ -1436,6 +1437,32 @@ static void ProcessActivations(int blockHeight, const std::vector<activation>& a
 }
 
 /**
+ * Checks that an Omni LevelDB database was opened, and reports a clear
+ * startup error otherwise.
+ *
+ * Continuing without the database would leave Omni Core half-initialized, so
+ * the caller is expected to abort startup when this returns false.
+ *
+ * @return True, if the database is open
+ */
+static bool CheckOmniDatabaseOpened(const CDBBase* db, const fs::path& path)
+{
+    if (db && db->IsOpen()) return true;
+
+    const std::string status = db ? db->GetOpenStatus().ToString() : "not created";
+    std::string hint;
+    if (status.find("lock") != std::string::npos || status.find("LOCK") != std::string::npos) {
+        hint = " The database is locked by another process, for example another Omni Core instance using the "
+               "same files. Stop that process and try again.";
+    }
+    const std::string msg = strprintf("Failed to open the Omni Layer database %s: %s.%s It is unsafe to continue.",
+                                      fs::PathToString(path), status, hint);
+    PrintToLog("%s\n", msg);
+    InitError(Untranslated(msg));
+    return false;
+}
+
+/**
  * Global handler to initialize Omni Core.
  *
  * @return An exit code, indicating success or failure
@@ -1487,6 +1514,21 @@ int mastercore_init(node::NodeContext& node)
     pDbFeeHistory = new COmniFeeHistory(data_dir / "OMNI_feehistory", fWipe);
     pDbNFT = new CMPNonFungibleTokensDB(data_dir / "OMNI_nftdb", fWipe);
     pDbAddress = new COmniAddressDB(data_dir / "OMNI_addressindex", fWipe);
+
+    const std::pair<const CDBBase*, fs::path> databases[] = {
+        {pDbTradeList, data_dir / "MP_tradelist"},
+        {pDbStoList, data_dir / "MP_stolist"},
+        {pDbTransactionList, data_dir / "MP_txlist"},
+        {pDbSpInfo, data_dir / "MP_spinfo"},
+        {pDbTransaction, data_dir / "Omni_TXDB"},
+        {pDbFeeCache, data_dir / "OMNI_feecache"},
+        {pDbFeeHistory, data_dir / "OMNI_feehistory"},
+        {pDbNFT, data_dir / "OMNI_nftdb"},
+        {pDbAddress, data_dir / "OMNI_addressindex"},
+    };
+    for (const auto& [db, path] : databases) {
+        if (!CheckOmniDatabaseOpened(db, path)) return 1;
+    }
 
     pathStateFiles = data_dir / "MP_persist";
     TryCreateDirectories(pathStateFiles);
@@ -1541,6 +1583,7 @@ int mastercore_init(node::NodeContext& node)
         LOCK(node.chainman->GetMutex());
         auto& activeChain = node.chainman->ActiveChainstate();
         pCoinsCache = new COmniCoinsCache(activeChain.CoinsDB(), data_dir / "OMNI_coinscache", fWipe);
+        if (!CheckOmniDatabaseOpened(pCoinsCache, data_dir / "OMNI_coinscache")) return 1;
         omniValidationInterface = std::make_shared<COmniValidationInterface>();
 
         // empty blockchain or prior last record

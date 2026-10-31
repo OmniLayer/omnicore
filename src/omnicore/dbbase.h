@@ -226,6 +226,9 @@ class CDBBase
     //! The database itself
     std::unique_ptr<leveldb::DB> pdb;
 
+    //! Result of the last attempt to open the database
+    leveldb::Status openStatus;
+
 protected:
     //! Number of entries read
     unsigned int nRead = 0;
@@ -328,6 +331,16 @@ public:
      * Deletes all entries of the database, and resets the counters.
      */
     void Clear();
+
+    /**
+     * @return Whether the database was opened successfully
+     */
+    bool IsOpen() const { return pdb != nullptr; }
+
+    /**
+     * @return The result of the last attempt to open the database
+     */
+    const leveldb::Status& GetOpenStatus() const { return openStatus; }
 };
 
 class CPartialKey {

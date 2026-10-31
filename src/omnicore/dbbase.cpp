@@ -39,7 +39,10 @@ leveldb::Status CDBBase::Open(const fs::path& path, bool fWipe)
     auto status = leveldb::DB::Open(options, path.string(), &db);
     if (status.ok()) {
         pdb.reset(db);
+    } else {
+        PrintToLog("Failed to open LevelDB in %s: %s\n", path.string(), status.ToString());
     }
+    openStatus = status;
     return status;
 }
 
