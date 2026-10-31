@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+#include <limits>
+
 #include <boost/test/unit_test.hpp>
 
 using namespace mastercore;
@@ -69,9 +71,22 @@ BOOST_AUTO_TEST_CASE(rounduint64_limits)
     BOOST_CHECK_EQUAL( // 4 byte unsigned
             4294967295U,
             rounduint64(4294967295.0L));
-    BOOST_CHECK_EQUAL( // 8 byte signed
-            9223372036854775807U,
-            rounduint64(9223372036854775807.0L));
+    // 2^63 - 1 is only exactly representable if long double has a mantissa
+    // of at least 64 bits (e.g. x87 80-bit extended precision). On platforms
+    // where long double is the same as double (53 bits, e.g. Apple arm64 or
+    // MSVC), the literal is rounded to 2^63 before rounduint64() is called, so
+    // this check cannot hold there. Skip only this check on such platforms.
+    if (std::numeric_limits<long double>::digits >= 64) {
+        BOOST_CHECK_EQUAL( // 8 byte signed
+                9223372036854775807U,
+                rounduint64(9223372036854775807.0L));
+    } else {
+        BOOST_TEST_MESSAGE("Skipping 8 byte signed limit check: long double has only "
+                           << std::numeric_limits<long double>::digits << " mantissa bits");
+    }
+    // Note: with a 53-bit long double, the literal below becomes 2^64, which
+    // is out of range for uint64_t. This check then only passes on platforms
+    // where the conversion saturates (e.g. arm64).
     BOOST_CHECK_EQUAL( // 8 byte unsigned
             18446744073709551615U,
             rounduint64(18446744073709551615.0L));
